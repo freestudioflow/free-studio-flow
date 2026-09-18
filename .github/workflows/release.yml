@@ -1,0 +1,125 @@
+name: Publish release assets to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub Release tag to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: release-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install verification tools
+        run: python -m pip install --upgrade build twine
+      - name: Test release source
+        run: |
+          cd release-source
+          python -m pip install -e ".[dev]"
+          python scripts/check_public_hygiene.py
+          python scripts/update_readme_after_publish.py --check-source-version
+          python -m pytest tests -m "not live" -v
+          python scripts/verify_clean_install.py
+      - name: Download approved GitHub Release assets
+        run: |
+          mkdir release-dist
+          gh release download "$RELEASE_TAG" --dir release-dist --pattern "free_studio_flow-*" --pattern "free-studio-flow-*"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > release.json
+      - name: Verify metadata and GitHub SHA-256 digests
+        run: |
+          python -m twine check release-dist/*
+          python scripts/verify_release_assets.py --tag "$RELEASE_TAG" --dist release-dist --release-json release.json --source release-source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-distributions-${{ env.RELEASE_TAG }}
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pypi-distributions-${{ github.event.release.tag_name || inputs.tag }}
+          path: dist
+      - name: Publish unchanged distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Wait for the published version on PyPI
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "https://pypi.org/pypi/free-studio-flow/${version}/json" > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "PyPI did not expose free-studio-flow ${version} after 300 seconds" >&2
+          exit 1
+
+  update-readme:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Update verified PyPI status
+        run: |
+          version="${RELEASE_TAG#v}"
+          release_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          python scripts/update_readme_after_publish.py \
+            --version "$version" \
+            --tag "$RELEASE_TAG" \
+            --commit "$release_commit"
+      - name: Open README-only publication PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: README.md
+          branch: automation/pypi-readme-${{ env.RELEASE_TAG }}
+          commit-message: "docs(readme): mark ${{ env.RELEASE_TAG }} as published"
+          title: "docs(readme): mark ${{ env.RELEASE_TAG }} as published"
+          body: |
+            PyPI has exposed this version through its JSON API.
+
+            This automated PR updates only the README verified-release block.
+          delete-branch: true

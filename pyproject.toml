@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "free-studio-flow"
+version = "0.1.0rc1"
+description = "AI-native film factory and Studio flows on top of ProDocuX contracts"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "FSF Team", email = "info@prodocux.com" }]
+keywords = ["film", "studio", "prodocux", "kaggle", "video"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+  "prodocux==0.3.0rc7",
+  "pdx-artifact-engine==0.3.0a8",
+  "pdx-adapter-media==0.2.0a3",
+  "python-docx==1.1.2",
+  "kaggle>=1.6.17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.4"]
+
+[project.scripts]
+fsf = "fsf.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/freestudioflow/free-studio-flow"
+Repository = "https://github.com/freestudioflow/free-studio-flow"
+Issues = "https://github.com/freestudioflow/free-studio-flow/issues"
+Releases = "https://github.com/freestudioflow/free-studio-flow/releases"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "live: live Kaggle work + public API verification; local models are skipped",
+]

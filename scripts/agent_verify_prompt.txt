@@ -1,0 +1,18 @@
+Run the FSF live verification gate. Do not invent a different test plan.
+
+Working directory: this repository root.
+Python: `.venv/Scripts/python` (Unix: `.venv/bin/python`). Do not use a global `python` or a bare `fsf` from PATH.
+Command: .venv/Scripts/python scripts/agent_verify.py
+
+Rules:
+- Follow AGENTS.md.
+- Do not edit files unless the script cannot start (import/path only).
+- Do not commit, push, or change PDX Kernel/Engine trees.
+- Do not submit a Kaggle GPU kernel. Do not set FSF_KAGGLE_SUBMIT=1.
+- Prove the local transport exists (shape). Do not ping a live local Comfy/GPU model.
+- Do not treat .shape.bin or mock bytes as media. fsf verify on those files is expected to fail.
+- Do not print kaggle.json, API keys, or tokens.
+- Kaggle credentials come from KAGGLE_CONFIG_DIR or ~/.kaggle/kaggle.json.
+
+Success means hygiene, offline pytest, live Kaggle/API pytest, and `.venv/Scripts/python -m fsf.cli live-check` all pass; local.shape_ok is true and live local-model ping is skipped.
+When done, report pass/fail for hygiene, offline pytest, live pytest, and live-check.

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "offline_pytest", "live_kaggle_api", "live_check", "local_skipped", "error"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "offline_pytest": { "type": "string", "enum": ["passed", "failed"] },
+    "live_kaggle_api": { "type": "string", "enum": ["passed", "failed"] },
+    "live_check": { "type": "string", "enum": ["passed", "failed"] },
+    "local_skipped": { "type": "boolean" },
+    "error": { "type": "string" }
+  }
+}

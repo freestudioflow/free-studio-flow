@@ -1,0 +1,78 @@
+{
+  "schema_version": "fsf_pdx_conformance_freeze_v1",
+  "status": "ready_for_pdx_contract_seal",
+  "frozen_at": "2026-09-11",
+  "implementation_authorized": false,
+  "implementation_release_pin": null,
+  "fsf": {
+    "home": ".",
+    "branch": "main",
+    "remote": null,
+    "not_broll": true,
+    "provenance_commit": "b2ea7fd2fcfd816d07f71bdfc77f5192ffec9ffb"
+  },
+  "runtime_pins_unchanged": {
+    "prodocux": "0.3.0rc4",
+    "pdx_artifact_engine": "0.3.0a4",
+    "note": "These are B-roll installed pins in the public B-roll generator tree. This freeze record is not a pin bump."
+  },
+  "kernel": {
+    "base_release": "0.3.0rc5",
+    "freeze_commit": "7e611fe36d6c9b6149910631ce1defb976965eaf",
+    "manifest": "docs/template-conformance/proposal-manifest.v1.json",
+    "manifest_sha256": "bb815e6468bbc73fed2ccacc550a630247c27c73c4fdcc913953e5402020db86"
+  },
+  "engine_and_media": {
+    "base_engine_release": "0.3.0a6",
+    "base_media_release": "0.2.0a2",
+    "freeze_commit": "09266ee28f2d274824b0b5577ac9d9cc8e64a418",
+    "manifest": "docs/conformance-checks/proposal-manifest.v1.json",
+    "manifest_sha256": "20d86a2e77b27a0d380ef745e58387c9234bfd0298a879a944c2933c011b2c3a"
+  },
+  "scope": {
+    "included": [
+      "PDX-P0b template-to-artifact table conformance",
+      "PDX-P1 media technical conformance",
+      "PDX-P2 generic check binding on a5/a6 workflow"
+    ],
+    "excluded": [
+      "PDX-P0a prompt-sheet intake",
+      "FSF-M1",
+      "paragraphs",
+      "----- separators",
+      "embedded-image inventory",
+      "stable paragraph source ids",
+      "production comparer",
+      "production media analyzer",
+      "runtime pin bump"
+    ]
+  },
+  "consumer_invariants": {
+    "parse_job_py_retained": true,
+    "not_evaluated_is_not_runstate": true,
+    "contract_sha_is_not_release_pin": true,
+    "conformance_runtime_not_enabled": true,
+    "broll_repo_not_modified_for_this_record": true
+  },
+  "pdx_must_confirm": [
+    "contract_sha_is_not_release_pin",
+    "parse_job_py_not_deleted",
+    "fsf_m1_not_claimed",
+    "not_evaluated_is_not_runstate",
+    "conformance_runtime_not_enabled",
+    "implementation_authorized_false",
+    "provenance_is_free_studio_flow_not_broll"
+  ],
+  "pdx_receipts": {
+    "status": "superseded_by_contract_seal_input",
+    "note": "PDX seals against pdx-contract-seal-v1, not these receipt commits.",
+    "kernel_commit": "87d0e2935809d3fe89c6835e4f5c322501af2384",
+    "engine_commit": "85daea14bbf30d03702ff65875b674d4cb3628d7"
+  },
+  "next_implementation_candidates": {
+    "note": "Not pins. Not tagged. Not authorized.",
+    "prodocux": "0.3.0rc6",
+    "pdx_artifact_engine": "0.3.0a7",
+    "pdx_adapter_media": "0.2.0a3"
+  }
+}

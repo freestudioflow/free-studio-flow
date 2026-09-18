@@ -1,0 +1,22 @@
+{
+  "schema_version": "fsf_executors_v1",
+  "comment": "Copy to gitignored fsf-executors.json. Put tokens in OS env vars named by key_env / endpoint_env / require_env. Never put api_key or token here. See docs/FSF_LIVE_VERIFY.md.",
+  "executors": [
+    {
+      "executor_id": "api.custom.video",
+      "transport": "api",
+      "tool_name": "studio.video.generate",
+      "display_name": "Operator-added vendor API",
+      "key_env": "FSF_VENDOR_API_KEY_CUSTOM",
+      "endpoint_env": "FSF_VENDOR_API_BASE_CUSTOM"
+    },
+    {
+      "executor_id": "local.comfy.secondary",
+      "transport": "local",
+      "tool_name": "studio.video.generate",
+      "display_name": "Operator-added local Comfy",
+      "require_env": "COMFYUI_SECONDARY_AVAILABLE",
+      "endpoint": "http://127.0.0.1:8189"
+    }
+  ]
+}

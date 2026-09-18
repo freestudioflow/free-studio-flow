@@ -1,0 +1,51 @@
+{
+  "schema_version": "fsf_pdx_official_runtime_pin_v1",
+  "status": "official_runtime_pin",
+  "verified_at": "2026-09-11",
+  "is_release_pin": true,
+  "implementation_authorized": false,
+  "conformance_runtime_enabled": false,
+  "broll": {
+    "path": "https://github.com/prodocux/b-roll-library-generator",
+    "hard_pins": {
+      "prodocux": "0.3.0rc7",
+      "pdx_artifact_engine": "0.3.0a8"
+    },
+    "media_not_in_hard_deps": true
+  },
+  "published": {
+    "prodocux": {
+      "version": "0.3.0rc7",
+      "commit": "92fc7f460e7e94c4ac08b353ac56577868fad5a4",
+      "github_release": "https://github.com/prodocux/prodocux/releases/tag/v0.3.0rc7",
+      "pypi": "https://pypi.org/project/prodocux/0.3.0rc7/"
+    },
+    "pdx_artifact_engine": {
+      "version": "0.3.0a8",
+      "commit": "df33f0cdb9777234b709bd342ef9e6cf39f2e524",
+      "github_release": "https://github.com/prodocux/pdx-artifact-engine/releases/tag/v0.3.0a8",
+      "pypi": "https://pypi.org/project/pdx-artifact-engine/0.3.0a8/"
+    },
+    "pdx_adapter_media": {
+      "version": "0.2.0a3",
+      "commit": "df33f0cdb9777234b709bd342ef9e6cf39f2e524",
+      "pypi": "https://pypi.org/project/pdx-adapter-media/0.2.0a3/",
+      "pin_when": "media_conformance_needed"
+    }
+  },
+  "failed_tags_untouched": ["v0.3.0rc6", "v0.3.0a7"],
+  "verification": {
+    "pypi_clean_install": true,
+    "pip_check": true,
+    "imports_and_exact_versions": true,
+    "twelve_consumer_checks_failed": 0,
+    "broll_pytest": "8 passed",
+    "docker_pypi_clean_install": true
+  },
+  "invariants": {
+    "parse_job_py_retained": true,
+    "not_evaluated_not_in_runstate": true,
+    "contract_sha_is_not_release_pin": true,
+    "conformance_runtime_not_enabled": true
+  }
+}
