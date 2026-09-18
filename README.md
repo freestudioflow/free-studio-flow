@@ -7,10 +7,13 @@ License: Apache-2.0. See [LICENSE](LICENSE). Public identity: **FSF Team** `<inf
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc1`**.
 
-Latest verified PyPI release: **none yet**. GitHub Release tags are the
-approval boundary. The first promotion uses Trusted Publishing
-(`.github/workflows/release.yml`, environment `pypi`). See
-[`docs/RELEASE.md`](docs/RELEASE.md).
+Latest verified PyPI release: **[`0.1.0rc1`](https://pypi.org/project/free-studio-flow/0.1.0rc1/)**,
+published from tag **[`v0.1.0rc1`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc1)**
+at commit `124b64aff89444f39086fe1297f9a073db7e5dcd`.
+
+```powershell
+python -m pip install "free-studio-flow==0.1.0rc1"
+```
 <!-- pypi-release-status:end -->
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator). Do not grow FSF features in B-roll. Construction plans and implementation diaries stay out of this public tree.

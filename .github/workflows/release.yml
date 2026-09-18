@@ -112,6 +112,7 @@ jobs:
             --tag "$RELEASE_TAG" \
             --commit "$release_commit"
       - name: Open README-only publication PR
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v7
         with:
           add-paths: README.md

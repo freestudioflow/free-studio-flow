@@ -95,5 +95,11 @@ Do not create tag `v0.1.0rc1` or a GitHub Release until the operator live
 gate has passed on this tree. Publishing the Release is what uploads to
 PyPI.
 
-After PyPI exposes the version through its JSON API, the workflow opens a
-README-only PR that updates the verified-release block.
+After PyPI exposes the version through its JSON API, the workflow tries to
+open a README-only PR that updates the verified-release block. If the
+organization forbids `GITHUB_TOKEN` pull requests, update that block on
+`main` by running:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\update_readme_after_publish.py --version 0.1.0rc1 --tag v0.1.0rc1 --commit <release-commit>
+```
