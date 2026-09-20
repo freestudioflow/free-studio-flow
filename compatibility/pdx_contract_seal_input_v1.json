@@ -10,7 +10,7 @@
     "push_required_for_pdx_seal": false,
     "identity": "local_git_commit_and_tag",
     "local_tag": "pdx-contract-seal-v1",
-    "note": "Planned GitHub org https://github.com/freestudioflow. Public identity is FSF Team <info@prodocux.com>. Do not wait for push to seal."
+    "note": "Planned GitHub org https://github.com/freestudioflow. Do not wait for push to seal."
   },
   "fsf": {
     "home": ".",

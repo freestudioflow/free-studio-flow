@@ -47,6 +47,7 @@ Unix: `.venv/bin/python`. Treat a hit as a release blocker. Do not commit or pus
 
 ## Reporting
 
-Report suspected vulnerabilities privately to FSF Team at info@prodocux.com before public
+Report suspected vulnerabilities privately via the contact form at
+[https://prodocux.com/#contact](https://prodocux.com/#contact) before public
 disclosure. Include the affected revision, reproduction steps, and impact.
 Do not attach `kaggle.json`, tokens, or customer media.

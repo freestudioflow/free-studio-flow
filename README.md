@@ -2,7 +2,7 @@
 
 AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocux/prodocux) contracts.
 
-License: Apache-2.0. See [LICENSE](LICENSE). Public identity: **FSF Team** `<info@prodocux.com>`.
+License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc1`**.

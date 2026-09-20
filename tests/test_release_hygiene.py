@@ -28,7 +28,7 @@ def test_public_package_metadata_is_complete() -> None:
     assert project["version"] == "0.1.0rc1"
     assert project["license"] == "Apache-2.0"
     assert project["license-files"] == ["LICENSE"]
-    assert project["authors"] == [{"name": "FSF Team", "email": "info@prodocux.com"}]
+    assert project["authors"] == [{"name": "FSF Team"}]
     assert project["urls"]["Homepage"] == "https://github.com/freestudioflow/free-studio-flow"
     assert project["urls"]["Repository"] == "https://github.com/freestudioflow/free-studio-flow"
     assert project["urls"]["Issues"] == "https://github.com/freestudioflow/free-studio-flow/issues"

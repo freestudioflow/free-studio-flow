@@ -32,7 +32,7 @@ Live artifacts belong under `output/` (gitignored). Tests build temporary DOCX i
 `fsf-executors.json` is gitignored and must list env **names** only.
 
 GitHub destination: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow).
-Public identity: **FSF Team** `<info@prodocux.com>`.
+Contact: [https://prodocux.com/#contact](https://prodocux.com/#contact).
 The first public package is pre-release `0.1.0rc1` while PDX pins remain rc/a.
 GitHub Releases are the approval boundary; PyPI uses Trusted Publishing
 (workflow `release.yml`, environment `pypi`). See [`docs/RELEASE.md`](RELEASE.md).

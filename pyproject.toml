@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
-authors = [{ name = "FSF Team", email = "info@prodocux.com" }]
+authors = [{ name = "FSF Team" }]
 keywords = ["film", "studio", "prodocux", "kaggle", "video"]
 classifiers = [
     "Development Status :: 3 - Alpha",
