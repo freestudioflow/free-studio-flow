@@ -1,14 +1,13 @@
 # Security
 
 This repository must stay free of secrets, local paths, and private account identifiers.
-The bar matches the ProDocuX labs public-export gate and the B-roll generator:
-source, tests, pins, and interface docs only.
+Tracked content is source, tests, pins, and interface docs.
 
 ## Never commit
 
 - `kaggle.json`, `HF_TOKEN`, `hf_*`, cloud keys, `.env`
 - Personal Kaggle usernames or filled kernel metadata
-- Absolute workstation paths (Windows user profiles and private lab drive roots)
+- Absolute workstation paths
 - Generated `output/`, live-check scratch, private Word sheets
 - Customer documents (tests create synthetic DOCX at runtime)
 
@@ -17,7 +16,7 @@ source, tests, pins, and interface docs only.
 `.venv/Scripts/python -m fsf.cli live-check` and `scripts/agent_verify.py` may report that a Kaggle username exists
 and which config **folder** was used. They must never print the API key.
 Kaggle jobs built by this tree stay `is_private: true`. Do not set `FSF_KAGGLE_SUBMIT=1`
-unless an operator explicitly wants a private GPU kernel.
+unless you intend to submit a private GPU kernel.
 
 Look for `kaggle.json` only in:
 

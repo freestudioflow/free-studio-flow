@@ -1,7 +1,7 @@
 # Data governance
 
-This public tree is a labs-style **file allowlist**, not a folder dump. Tracked
-paths must be listed in `scripts/check_public_hygiene.py` (`PUBLIC_FILES` and
+This public tree is a **file allowlist**, not a folder dump. Tracked paths
+must be listed in `scripts/check_public_hygiene.py` (`PUBLIC_FILES` and
 `PUBLIC_DIR_PREFIXES`: `src/`, `tests/`, `scripts/`).
 
 Allowed documentation is only:
@@ -15,20 +15,19 @@ Allowed machine records are only:
 - `compatibility/pdx_conformance_freeze_v1.json`
 - `compatibility/pdx_contract_seal_input_v1.json`
 
-Construction notes, candidate reviews, and implementation diaries belong in
-gitignored `internal/` (local only). They are not part of the public package.
+Construction notes and implementation diaries are not part of the public
+package.
 
 The tree does **not** contain:
 
-- operator Kaggle tokens or usernames
+- API keys, `kaggle.json`, or other secrets
 - customer prompt sheets or generated media
-- unpublished lab checkouts, private venvs, or workstation layout
-- hackathon strategy, pitch decks, or internal review prompts
-- construction plans, implementation diaries, candidate-review notes, or CJK docs
+- absolute workstation paths
+- construction plans or CJK documentation
 
 Live artifacts belong under `output/` (gitignored). Tests build temporary DOCX in pytest
-`tmp_path`. Kaggle credentials stay in the operator environment (`KAGGLE_CONFIG_DIR` or
-`~/.kaggle`). Vendor API and extra local/API tokens stay in environment variables;
+`tmp_path`. Kaggle credentials stay in `KAGGLE_CONFIG_DIR` or `~/.kaggle`.
+Vendor API and extra local/API tokens stay in environment variables;
 `fsf-executors.json` is gitignored and must list env **names** only.
 
 GitHub destination: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow).

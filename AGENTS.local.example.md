@@ -17,4 +17,4 @@ How to set real secrets: [`docs/FSF_LIVE_VERIFY.md`](docs/FSF_LIVE_VERIFY.md) (s
 
 Kaggle credentials: `KAGGLE_CONFIG_DIR` or `~/.kaggle/kaggle.json`. Extra API/local backends: gitignored `fsf-executors.json` (copy `fsf-executors.example.json`); JSON holds env **names** only.
 
-Construction notes stay in gitignored `internal/`. Do not copy them back into `docs/` or `compatibility/`.
+Do not put construction notes, upgrade plans, or implementation diaries in this checkout.

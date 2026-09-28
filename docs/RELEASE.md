@@ -38,8 +38,7 @@ Unix: `.venv/bin/python` instead of `.venv/Scripts/python.exe`.
 - Breaking CLI, executor IDs, transport contracts, or PDX pin changes need a
   new version. Coordinate pin bumps with the freeze records under
   `compatibility/`.
-- Studio desk / Farpals UI, B-roll generator features, and PDX Kernel/Engine
-  work stay outside this repository.
+- This package is CLI/skill only. Do not add a Studio desk or other GUI here.
 
 ## Release gate
 

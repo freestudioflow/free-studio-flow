@@ -34,14 +34,11 @@ Do not write a standalone SDK script that bypasses the CLI unless the operator e
 
 ## Forbidden
 
-- Do not edit the PDX Kernel / Engine worktrees
-- Do not push B-roll; do not grow FSF features in B-roll
-- Do not build Studio desk / Farpals UI
 - Do not write tokens, Kaggle keys, or HF tokens into manifests, logs, or commits
-- Do not commit `internal/` (gitignored construction notes, candidate reviews, implementation diaries)
+- Do not add construction plans or implementation diaries to this tree
+- Do not add a Studio desk or other GUI; this package is CLI/skill
 - Do not publish a public Kaggle kernel (`is_private` must be true)
-- Do not publish a public Kaggle kernel (`is_private` must be true)
-- Do not submit a 12-hour GPU kernel by default (unless the operator explicitly sets `FSF_KAGGLE_SUBMIT=1`)
+- Do not submit a 12-hour GPU kernel unless `FSF_KAGGLE_SUBMIT=1` is set
 
 ## Required gate (same suite for every agent)
 

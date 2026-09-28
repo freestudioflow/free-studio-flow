@@ -123,6 +123,11 @@ def test_hygiene_rejects_internal_docs_and_cjk(tmp_path: Path) -> None:
     denied = hygiene.inspect_entry("docs/FREE_STUDIO_FLOW_INTEGRATION_PLAN_V3.md", plan)
     assert denied
     assert "denied filename" in denied[0]
+    upgrade = tmp_path / "upgrade-film-vr-gaming-v1.md"
+    upgrade.write_text("plan\n", encoding="utf-8")
+    upgrade_hits = hygiene.inspect_entry("docs/upgrade-film-vr-gaming-v1.md", upgrade)
+    assert upgrade_hits
+    assert "denied filename" in upgrade_hits[0]
 
 
 def test_hygiene_flags_env_openai_key_and_full_cjk(tmp_path: Path) -> None:
