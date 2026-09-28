@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freestudioflow.dev/schemas/fsf_media_conformance_receipt.v1.json",
+  "title": "FSF media conformance receipt v1",
+  "description": "Bounded Media report, profile identity, and the expected contract that was evaluated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_schema",
+    "report",
+    "profile",
+    "report_digest",
+    "profile_digest",
+    "expected_digest",
+    "expected",
+    "evaluation_status",
+    "artifact_sha256",
+    "artifact_name",
+    "schema_validated"
+  ],
+  "properties": {
+    "schema_version": {"const": "fsf_media_conformance_receipt_v1"},
+    "report_schema": {"const": "pdx_media_conformance_result_v1"},
+    "report": {"type": "object"},
+    "profile": {"type": "object"},
+    "report_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "profile_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expected_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expected": {"type": "object", "minProperties": 1},
+    "evaluation_status": {
+      "enum": ["conforms", "does_not_conform", "evaluation_failed", "not_evaluated"]
+    },
+    "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "artifact_name": {"type": "string", "minLength": 1, "maxLength": 512},
+    "schema_validated": {"const": true}
+  }
+}

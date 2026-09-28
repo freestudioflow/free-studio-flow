@@ -14,7 +14,12 @@ from fsf.conformance.media import (
 )
 from fsf.executors.registry import get_executor
 from fsf.intake.compiler import compile_job
-from fsf.runtime.external_op import build_resumed_job, inspect_existing_artifacts
+from fsf.runtime.external_op import (
+    build_resumed_job,
+    checkpoint_record_from_tool_result,
+    inspect_existing_artifacts,
+    save_checkpoint,
+)
 from fsf.runtime.plan import build_execution_plan
 
 
@@ -77,11 +82,24 @@ def test_full_lifecycle_e2e(tmp_path: Path) -> None:
     res_1 = executor.execute_shot(manifest["tasks"][0], out_dir)
     assert res_1["schema_version"] == "pdx_tool_result_v1"
     assert (out_dir / "task_001.mock.bin").is_file()
+    save_checkpoint(
+        out_dir,
+        manifest,
+        {
+            "task_001": checkpoint_record_from_tool_result(
+                manifest, manifest["tasks"][0], res_1, executor.execution_kind
+            )
+        },
+    )
 
-    # Step B: Resume check — task 1 should be reused, task 2 pending
-    resumed_manifest, pending, completed = build_resumed_job(manifest, out_dir)
+    # Step B: Resume check — task 1 should be reused as shape, not production media
+    resumed_manifest, pending, completed = build_resumed_job(
+        manifest, out_dir, executor_id=executor.executor_id
+    )
     assert len(completed) == 1
     assert completed[0]["id"] == "task_001"
+    assert completed[0]["artifact"]["production_completed"] is False
+    assert completed[0]["artifact"]["resume_kind"] == "shape_generated"
     assert len(pending) == 1
     assert pending[0]["id"] == "task_002"
 
@@ -89,13 +107,29 @@ def test_full_lifecycle_e2e(tmp_path: Path) -> None:
     res_2 = executor.execute_shot(pending[0], out_dir)
     assert res_2["schema_version"] == "pdx_tool_result_v1"
     assert (out_dir / "task_002.mock.bin").is_file()
+    save_checkpoint(
+        out_dir,
+        manifest,
+        {
+            "task_001": checkpoint_record_from_tool_result(
+                manifest, manifest["tasks"][0], res_1, executor.execution_kind
+            ),
+            "task_002": checkpoint_record_from_tool_result(
+                manifest, pending[0], res_2, executor.execution_kind
+            ),
+        },
+    )
 
     # Verify both artifacts now exist
-    status_final = inspect_existing_artifacts(manifest, out_dir)
+    status_final = inspect_existing_artifacts(
+        manifest, out_dir, executor_id=executor.executor_id
+    )
     assert status_final["task_001"]["completed"] is True
+    assert status_final["task_001"]["production_completed"] is False
     assert status_final["task_002"]["completed"] is True
+    assert status_final["task_002"]["production_completed"] is False
 
-    # --- Phase 4: M3 Media Conformance ---
+    # --- Phase 4: mock/shape artifacts must not pass media verify ---
     for task in manifest["tasks"]:
         shot_id = task["id"]
         shot_file = out_dir / f"{shot_id}.mock.bin"
@@ -106,11 +140,15 @@ def test_full_lifecycle_e2e(tmp_path: Path) -> None:
             expected,
             probe_runner=E2EMockProbe(),
             request_id=f"req:qc:{shot_id}",
+            allow_injected_probe=True,
         )
 
-        assert report["evaluation_status"] == "conforms"
-        assert host_action["host_action"] == "permit_next_step"
-        assert host_action["create_binding"] is True
+        assert report["schema_version"] == "fsf_policy_decision_v1"
+        assert report["decision"] == "refuse"
+        assert any(i["code"] == "FSF_CONTRACT_SHAPE_NOT_MEDIA" for i in report["issues"])
+        assert host_action["host_action"] == "fail_block_or_retry"
+        assert host_action["create_binding"] is False
+        assert host_action["check_terminal_outcome"] == "failed"
 
     # --- Phase 5: CLI E2E Verification ---
     cli_out = tmp_path / "cli_pipeline"

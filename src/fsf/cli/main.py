@@ -17,7 +17,7 @@ from fsf.executors.registry import DEFAULT_REGISTRY, get_executor
 from fsf.intake.compiler import compile_job
 from fsf.runtime.external_op import (
     build_resumed_job,
-    compute_file_sha256,
+    checkpoint_record_from_tool_result,
     save_checkpoint,
 )
 from fsf.runtime.plan import build_execution_plan
@@ -313,27 +313,28 @@ def handle_run(args: argparse.Namespace) -> int:
         print("[FSF Run] SHAPE artifacts are not media; filenames use .shape.bin")
 
     if not args.no_resume:
-        resumed_manifest, pending_tasks, completed_tasks = build_resumed_job(manifest, out_dir)
+        resumed_manifest, pending_tasks, completed_tasks = build_resumed_job(
+            manifest, out_dir, executor_id=executor.executor_id
+        )
         print(f"[FSF Resume] Pending: {len(pending_tasks)} | Reused: {len(completed_tasks)}")
         active_tasks = pending_tasks
+        completed_artifacts = {
+            task["id"]: dict(task["artifact"])
+            for task in completed_tasks
+            if isinstance(task.get("artifact"), dict)
+        }
     else:
         active_tasks = manifest["tasks"]
-
-    completed_artifacts: dict[str, Any] = {}
+        completed_artifacts = {}
 
     for task in active_tasks:
         shot_id = task["id"]
         print(f"  -> Generating {shot_id}...")
         res = executor.execute_shot(task, out_dir)
-        outputs = res.get("outputs", {})
-        completed_artifacts[shot_id] = {
-            "file": outputs.get("artifact_file"),
-            "sha256": outputs.get("artifact_sha256"),
-            "size_bytes": outputs.get("size_bytes"),
-            "status": "completed",
-        }
+        completed_artifacts[shot_id] = checkpoint_record_from_tool_result(
+            manifest, task, res, kind
+        )
 
-    # Save checkpoint
     save_checkpoint(out_dir, manifest, completed_artifacts)
     print(f"[FSF Run] Finished. Checkpoint saved to '{out_dir / 'fsf_checkpoint.json'}'")
     return 0
@@ -350,6 +351,12 @@ def handle_verify(args: argparse.Namespace) -> int:
             expected = json.loads(args.expected)
 
     report, host_action = evaluate_media_file(media_path, expected)
+    if report.get("schema_version") == "fsf_policy_decision_v1":
+        print("=== FSF Policy Decision (not a Media conformance report) ===")
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print("\n=== Host Action Mapping ===")
+        print(json.dumps(host_action, indent=2, ensure_ascii=False))
+        return 1
     print("=== PDX Media Conformance Report ===")
     print(json.dumps(report, indent=2, ensure_ascii=False))
     print("\n=== Host Action Mapping ===")

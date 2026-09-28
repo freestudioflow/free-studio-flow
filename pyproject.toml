@@ -40,6 +40,9 @@ Releases = "https://github.com/freestudioflow/free-studio-flow/releases"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"fsf.conformance" = ["*.schema.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
