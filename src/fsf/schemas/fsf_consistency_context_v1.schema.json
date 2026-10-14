@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freestudioflow.dev/schemas/fsf/consistency_context.v1.schema.json",
+  "title": "FSF Consistency Context v1",
+  "description": "Immutable consistency context carried inside step.inputs. Specifies asset references, continuity intent, and generation intent for a shot step. The original shot_spec and asset_spec in step.inputs are never modified; all rc5 consistency information lives exclusively here.",
+  "type": "object",
+  "required": ["schema_version", "asset_refs", "review_required"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "fsf_consistency_context_v1",
+      "description": "Fixed schema identifier. Always 'fsf_consistency_context_v1'."
+    },
+    "asset_refs": {
+      "type": "array",
+      "description": "Ordered list of asset references applicable to this shot. Order is significant and preserved in the digest.",
+      "items": { "$ref": "#/$defs/asset_ref" }
+    },
+    "ref_images": {
+      "type": "array",
+      "description": "Shot-level reference images (not per-asset). Each image is identified by role and content SHA-256. Paths are location hints only and excluded from the digest.",
+      "items": { "$ref": "#/$defs/ref_image" }
+    },
+    "continues_from": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/continuity_source" }
+      ],
+      "description": "Continuity declaration. Null means no declared continuity. resolved_sha256 is null at compile time and filled by the executor from the completed upstream artifact."
+    },
+    "generation_intent": {
+      "$ref": "#/$defs/generation_intent",
+      "description": "Generation prompt components. base_prompt must equal shot_spec.generation_prompt at compile time. effective_prompt is executor-written and excluded from the digest."
+    },
+    "review_required": {
+      "type": "boolean",
+      "description": "When true, assembly steps are gated on an approved fsf_consistency_review_v1 record bound to this shot's artifact."
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "asset_ref": {
+      "type": "object",
+      "required": ["asset_id", "version", "content_hash"],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Must reference an asset_spec.asset_id present in the same job."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Operator-assigned version string for this asset."
+        },
+        "content_hash": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hex of the canonical asset digest (covers asset_id, version, source_prompt, kind, constraints, ref_images[].{role,sha256})."
+        },
+        "ref_images": {
+          "type": "array",
+          "description": "Per-asset reference images. Role and sha256 are content identity; path is a location hint excluded from the digest.",
+          "items": { "$ref": "#/$defs/ref_image" }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ref_image": {
+      "type": "object",
+      "required": ["role", "sha256"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["character", "scene", "prop", "style"],
+          "description": "Semantic role of this reference image."
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the reference image file contents. Content identity — path excluded from digest."
+        },
+        "path": {
+          "type": "string",
+          "description": "Location hint for the image file. Not included in any digest."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "continuity_source": {
+      "type": "object",
+      "required": ["shot_id", "selection_rule", "aspects"],
+      "properties": {
+        "shot_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID of the source shot this shot continues from. Must be declared before this shot in the same job."
+        },
+        "selection_rule": {
+          "type": "string",
+          "enum": ["latest_completed", "specific_artifact"],
+          "description": "How to resolve the upstream artifact. 'latest_completed': take the most recent completed/reused artifact from the current job+run. 'specific_artifact': use artifact_ref."
+        },
+        "artifact_ref": {
+          "type": "string",
+          "description": "Required when selection_rule is 'specific_artifact'. The artifact output ref string from the upstream step."
+        },
+        "aspects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["appearance", "costume", "scene", "composition", "motion"]
+          },
+          "description": "Which visual/narrative aspects this shot continues from the source."
+        },
+        "resolved_sha256": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ],
+          "description": "Null at compile time. Filled by the executor with the actual upstream artifact SHA-256 before computing the inputs_digest."
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": { "selection_rule": { "const": "specific_artifact" } },
+        "required": ["selection_rule"]
+      },
+      "then": { "required": ["artifact_ref"] }
+    },
+
+    "generation_intent": {
+      "type": "object",
+      "required": ["base_prompt", "injection_rule_version"],
+      "properties": {
+        "base_prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Must equal shot_spec.generation_prompt at compile time. Source of truth for digest. Never rewritten."
+        },
+        "injection_rule_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the prompt-assembly rule used to combine base_prompt and asset_injections. Included in digest."
+        },
+        "asset_injections": {
+          "type": "array",
+          "description": "Ordered asset text injections. Each entry records which asset contributed text and what was injected. Included in digest.",
+          "items": { "$ref": "#/$defs/asset_injection" }
+        },
+        "effective_prompt": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ],
+          "description": "Executor-written combined prompt (base_prompt + injections). Set at execution time, NOT at compile time. Excluded from the digest. Cannot be set by external callers."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "asset_injection": {
+      "type": "object",
+      "required": ["asset_id", "injected_text"],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "injected_text": {
+          "type": "string",
+          "description": "The text fragment injected for this asset. Included in digest."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

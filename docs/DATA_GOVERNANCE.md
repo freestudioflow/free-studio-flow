@@ -1,0 +1,41 @@
+# Data governance
+
+This public tree is a **file allowlist**, not a folder dump. Tracked paths
+must be listed in `scripts/check_public_hygiene.py` (`PUBLIC_FILES` and
+`PUBLIC_DIR_PREFIXES`: `src/`, `tests/`, `scripts/`).
+
+Allowed documentation is only:
+
+- `README.md`, `AGENTS.md`, `AGENTS.local.example.md`, `SECURITY.md`
+- `docs/RELEASE.md`, `docs/FSF_LIVE_VERIFY.md`, `docs/DATA_GOVERNANCE.md`
+
+Allowed machine records are only:
+
+- `compatibility/pdx_official_pin_rc7_a8_a3.json`
+- `compatibility/pdx_conformance_freeze_v1.json`
+- `compatibility/pdx_contract_seal_input_v1.json`
+
+`MANIFEST.in` explicitly includes the public guides, executor configuration
+template, verification scripts, tests, and compatibility records in source
+distributions. Wheel package metadata contains the README.
+
+Construction notes and implementation diaries are not part of the public
+package.
+
+The tree does **not** contain:
+
+- API keys, `kaggle.json`, or other secrets
+- customer prompt sheets or generated media
+- absolute workstation paths
+- construction plans or CJK documentation
+
+Live artifacts belong under `output/` (gitignored). Tests build temporary DOCX in pytest
+`tmp_path`. Kaggle credentials stay in `KAGGLE_CONFIG_DIR` or `~/.kaggle`.
+Vendor API and extra local/API tokens stay in environment variables;
+`fsf-executors.json` is gitignored and must list env **names** only.
+
+GitHub destination: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow).
+Contact: [https://prodocux.com/#contact](https://prodocux.com/#contact).
+The public package series uses pre-release versions (e.g. `0.1.0rc4`) while PDX pins remain rc/a.
+GitHub Releases are the approval boundary; PyPI uses Trusted Publishing
+(workflow `release.yml`, environment `pypi`). See [`docs/RELEASE.md`](RELEASE.md).

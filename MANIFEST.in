@@ -1,0 +1,7 @@
+include README.md LICENSE AGENTS.md AGENTS.local.example.md SECURITY.md
+include fsf-executors.example.json
+include docs/RELEASE.md docs/FSF_LIVE_VERIFY.md docs/DATA_GOVERNANCE.md
+include compatibility/*.json
+recursive-include scripts *.py *.txt *.json
+recursive-include tests *.py
+recursive-include src/fsf/schemas *.schema.json
