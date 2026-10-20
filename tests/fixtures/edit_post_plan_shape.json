@@ -1,0 +1,59 @@
+{
+  "schema_version": "pdx_execution_plan_v1",
+  "request_id": "example_edit_post",
+  "producer": {
+    "type": "fsf_planner",
+    "name": "fsf.runtime.plan"
+  },
+  "steps": [
+    {
+      "id": "post_sources",
+      "kind": "transform",
+      "name": "Verify source declarations",
+      "transform": "fsf.edit.resolve_sources",
+      "inputs": {
+        "source_bindings": []
+      },
+      "depends_on": [],
+      "outputs": [
+        "artifact:verified_source.mp4"
+      ]
+    },
+    {
+      "id": "post_assembly",
+      "kind": "transform",
+      "name": "Assemble edit",
+      "transform": "fsf.assembly.fast_concat",
+      "inputs": {
+        "artifact_inputs": [
+          {
+            "producer_step_id": "post_sources",
+            "video_artifact": "artifact:verified_source.mp4",
+            "clip_id": "C001"
+          }
+        ]
+      },
+      "depends_on": [
+        "post_sources"
+      ],
+      "outputs": [
+        "artifact:edited.mp4"
+      ]
+    },
+    {
+      "id": "post_qc",
+      "kind": "tool",
+      "name": "Technical media check",
+      "tool": "pdx.media.technical_conform",
+      "inputs": {
+        "target_artifact": "artifact:edited.mp4"
+      },
+      "depends_on": [
+        "post_assembly"
+      ],
+      "outputs": [
+        "report:edited.json"
+      ]
+    }
+  ]
+}

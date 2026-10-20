@@ -1,0 +1,178 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_blender_request_v1"
+    },
+    "control_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "source_record_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_file": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_type": {
+      "enum": [
+        "blend",
+        "glb"
+      ]
+    },
+    "profile": {
+      "enum": [
+        "reference",
+        "clay_v1"
+      ]
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24000
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1001
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "additionalProperties": false
+    },
+    "start_frame": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+    },
+    "end_frame": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100001
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "views": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+          },
+          "camera_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+          }
+        },
+        "required": [
+          "view_id",
+          "camera_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "motions": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "object_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "location": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "rotation_euler": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "frame",
+                "location",
+                "rotation_euler"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 96
+          }
+        },
+        "required": [
+          "object_id",
+          "keys"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "control_id",
+    "revision",
+    "source_record_digest",
+    "source_file",
+    "source_type",
+    "profile",
+    "clock",
+    "start_frame",
+    "end_frame",
+    "width",
+    "height",
+    "views",
+    "motions"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

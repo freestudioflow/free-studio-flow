@@ -1,0 +1,26 @@
+{
+  "schema_version": "pdx_execution_plan_v1",
+  "request_id": "example_blender",
+  "producer": {
+    "type": "fsf_planner",
+    "name": "fsf.runtime.plan"
+  },
+  "steps": [
+    {
+      "id": "export_reference",
+      "kind": "transform",
+      "name": "Export model and reference",
+      "transform": "fsf.blender.export_reference",
+      "inputs": {
+        "asset_version_ref": "prop_A@1",
+        "render_profile": "draft_cpu"
+      },
+      "depends_on": [],
+      "outputs": [
+        "artifact:model.glb",
+        "artifact:reference.png",
+        "artifact:manifest.json"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,313 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_model_api_profile_v1"
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "protocol": {
+      "enum": [
+        "json_http_v1",
+        "openai_chat_v1",
+        "gemini_content_v1",
+        "bedrock_converse_v1"
+      ]
+    },
+    "capability": {
+      "enum": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "upscale"
+      ]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "authorized": {
+      "type": "boolean"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "key_env": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "region": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "allow_loopback": {
+      "type": "boolean"
+    },
+    "artifact_hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "maxItems": 16
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "parameter_schema": {
+      "type": "object"
+    },
+    "http": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "auth_header": {
+              "enum": [
+                "Authorization",
+                "x-goog-api-key",
+                "none"
+              ]
+            },
+            "routes": {
+              "type": "object",
+              "properties": {
+                "submit": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fetch": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reconcile": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cancel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "check": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "submit",
+                "status",
+                "fetch",
+                "reconcile",
+                "cancel",
+                "check"
+              ],
+              "additionalProperties": false
+            },
+            "body": {
+              "type": "object"
+            },
+            "response_mode": {
+              "enum": [
+                "text",
+                "base64",
+                "url",
+                "binary"
+              ]
+            },
+            "result_pointer": {
+              "type": "string"
+            },
+            "job_id_pointer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status_pointer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status_map": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            }
+          },
+          "required": [
+            "auth_header",
+            "routes",
+            "body",
+            "response_mode",
+            "result_pointer",
+            "job_id_pointer",
+            "status_pointer",
+            "status_map"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "suffix": {
+          "type": "string",
+          "pattern": "^\\.[a-z0-9]{1,8}$"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "max_dimension": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 8192
+        },
+        "max_duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 600
+        }
+      },
+      "required": [
+        "media_type",
+        "suffix",
+        "max_bytes",
+        "max_dimension",
+        "max_duration_seconds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile_id",
+    "protocol",
+    "capability",
+    "model",
+    "authorized",
+    "base_url",
+    "key_env",
+    "region",
+    "allow_loopback",
+    "artifact_hosts",
+    "timeout_seconds",
+    "max_tokens",
+    "parameter_schema",
+    "http",
+    "output"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

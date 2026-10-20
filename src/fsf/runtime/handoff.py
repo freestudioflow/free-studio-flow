@@ -190,6 +190,8 @@ def build_workorder(
     expected_media_contract: dict[str, Any] | None = None,
     expected_contract_digest: str | None = None,
     consistency_requirements: dict[str, Any] | None = None,
+    video_condition: dict[str, Any] | None = None,
+    condition_capability: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Construct an authoritative fsf_workorder_v1.
 
@@ -236,6 +238,11 @@ def build_workorder(
         workorder["consistency_requirements"] = None
         workorder["requirements_digest"] = None
 
+    if video_condition is not None:
+        from fsf.runtime.blender import validate_condition_capability
+        validate_condition_capability(video_condition, condition_capability or {})
+        workorder["video_condition"] = copy.deepcopy(video_condition)
+        workorder["condition_capability"] = copy.deepcopy(condition_capability)
     workorder["workorder_digest"] = canonical_contract_digest(workorder)
     return workorder
 
@@ -631,6 +638,16 @@ def ingest_workorder_result(
                     f"(resolved_sha256={req_obj['resolved_sha256'][:16]}…)."
                 )
 
+    if workorder.get("video_condition") is not None:
+        from fsf.runtime.blender import validate_condition_ack, BlenderError
+        try:
+            payload = {k: v for k, v in workorder.items() if k != "workorder_digest"}
+            if canonical_contract_digest(payload) != workorder.get("workorder_digest"):
+                raise BlenderError("CONDITION_INTEGRITY")
+            validate_condition_ack(workorder["video_condition"], workorder.get("condition_capability") or {},
+                                   data.get("condition_acknowledgement"))
+        except BlenderError:
+            raise HandoffIntegrityError("CONDITION_ACK_INVALID") from None
     clean_detail = sanitize_process_text(str(data.get("detail") or ""))
 
     result: dict[str, Any] = {
@@ -646,6 +663,8 @@ def ingest_workorder_result(
         "detail": clean_detail,
         "result_digest": canonical_contract_digest(data),
     }
+    if workorder.get("video_condition") is not None:
+        result["condition_acknowledgement"] = copy.deepcopy(data["condition_acknowledgement"])
     # Include the verified consistency_acknowledgement in the result so the
     # executor can record it in the journal for auditability.
     # This records what the agent REPORTED; visual compliance is not implied.

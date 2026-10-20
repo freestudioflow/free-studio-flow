@@ -1,0 +1,43 @@
+{
+  "schema_version": "fsf_model_api_profile_v1",
+  "profile_id": "nebius_text",
+  "protocol": "openai_chat_v1",
+  "capability": "text",
+  "model": "MODEL_ID",
+  "authorized": false,
+  "base_url": "https://api.tokenfactory.nebius.com/v1",
+  "key_env": "NEBIUS_API_KEY",
+  "region": null,
+  "allow_loopback": false,
+  "artifact_hosts": [],
+  "timeout_seconds": 120,
+  "max_tokens": 64,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "max_tokens": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 64
+      },
+      "temperature": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "max_tokens",
+      "temperature"
+    ],
+    "additionalProperties": false
+  },
+  "http": null,
+  "output": {
+    "media_type": "text/plain",
+    "suffix": ".txt",
+    "max_bytes": 8388608,
+    "max_dimension": 2048,
+    "max_duration_seconds": 30
+  }
+}

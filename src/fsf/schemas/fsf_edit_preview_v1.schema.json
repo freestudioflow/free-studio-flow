@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_edit_preview_v1"
+    },
+    "edit_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "edit_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "clip_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "start_frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "end_frame": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "preview_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "settings_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "kind": {
+      "const": "preview"
+    },
+    "source_in_frame": {"type": "integer", "minimum": 0},
+    "source_out_frame": {"type": "integer", "minimum": 1},
+    "timeline_start_frame": {"type": "integer", "minimum": 0},
+    "timeline_end_frame": {"type": "integer", "minimum": 1},
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "edit_id",
+    "revision",
+    "edit_digest",
+    "clip_id",
+    "source_id",
+    "source_sha256",
+    "start_frame",
+    "end_frame",
+    "source_in_frame",
+    "source_out_frame",
+    "timeline_start_frame",
+    "timeline_end_frame",
+    "preview_sha256",
+    "settings_digest",
+    "kind",
+    "manifest_digest"
+  ],
+  "additionalProperties": false
+}

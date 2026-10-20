@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "control_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "const": "control.mp4"
+        },
+        "role": {
+          "const": "control_video"
+        },
+        "media_type": {
+          "const": "video/mp4"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        }
+      },
+      "required": [
+        "path",
+        "role",
+        "media_type",
+        "sha256",
+        "size_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24000
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1001
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "additionalProperties": false
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 96
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "frame_mapping_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "schema_version": {
+      "const": "fsf_control_import_v1"
+    },
+    "provenance": {
+      "const": "operator_control_video_import"
+    },
+    "preprocess": {
+      "const": "none"
+    },
+    "motion_review": {
+      "const": "not_reviewed"
+    },
+    "clay_profile": {
+      "const": "unverified"
+    },
+    "generation_dispatches": {
+      "const": 0
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "decoded_rgb_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "frame_mapping": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 96,
+      "items": {
+        "type": "object",
+        "properties": {
+          "input_frame": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 95
+          },
+          "output_frame": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 95
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "num": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "den": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "num",
+              "den"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "input_frame",
+          "output_frame",
+          "time"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "control_id",
+    "revision",
+    "artifact",
+    "clock",
+    "frame_count",
+    "width",
+    "height",
+    "frame_mapping_digest",
+    "schema_version",
+    "provenance",
+    "preprocess",
+    "motion_review",
+    "clay_profile",
+    "generation_dispatches",
+    "manifest_digest",
+    "decoded_rgb_sha256",
+    "frame_mapping"
+  ],
+  "additionalProperties": false
+}

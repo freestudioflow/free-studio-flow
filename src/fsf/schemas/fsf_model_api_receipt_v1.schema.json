@@ -1,0 +1,106 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_model_api_receipt_v1"
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "capability": {
+      "enum": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "upscale"
+      ]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "reported_model": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes",
+        "media_type"
+      ],
+      "additionalProperties": false
+    },
+    "quality": {
+      "enum": [
+        "decoded",
+        "conforms",
+        "text_response"
+      ]
+    },
+    "review": {
+      "const": "not_reviewed"
+    },
+    "provider_response_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receipt_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "request_digest",
+    "profile_digest",
+    "capability",
+    "model",
+    "reported_model",
+    "artifact",
+    "quality",
+    "review",
+    "provider_response_sha256",
+    "receipt_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

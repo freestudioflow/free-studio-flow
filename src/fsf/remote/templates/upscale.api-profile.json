@@ -1,0 +1,64 @@
+{
+  "schema_version": "fsf_model_api_profile_v1",
+  "profile_id": "custom_upscale",
+  "protocol": "json_http_v1",
+  "capability": "upscale",
+  "model": "MODEL_ID",
+  "authorized": false,
+  "base_url": "https://worker.example.invalid/v1",
+  "key_env": "FSF_MODEL_API_KEY",
+  "region": null,
+  "allow_loopback": false,
+  "artifact_hosts": [],
+  "timeout_seconds": 120,
+  "max_tokens": 64,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "scale": {
+        "type": "number",
+        "minimum": 2,
+        "maximum": 8
+      }
+    },
+    "required": [
+      "scale"
+    ],
+    "additionalProperties": false
+  },
+  "http": {
+    "auth_header": "Authorization",
+    "routes": {
+      "submit": "/upscale",
+      "status": null,
+      "fetch": null,
+      "reconcile": null,
+      "cancel": null,
+      "check": "/capabilities"
+    },
+    "body": {
+      "model": "{model}",
+      "prompt": "{prompt}",
+      "image": "{inputs.image.data_uri}",
+      "scale": "{params.scale}"
+    },
+    "response_mode": "base64",
+    "result_pointer": "/output",
+    "job_id_pointer": null,
+    "status_pointer": null,
+    "status_map": {
+      "queued": "queued",
+      "running": "running",
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    }
+  },
+  "output": {
+    "media_type": "image/png",
+    "suffix": ".png",
+    "max_bytes": 8388608,
+    "max_dimension": 2048,
+    "max_duration_seconds": 30
+  }
+}

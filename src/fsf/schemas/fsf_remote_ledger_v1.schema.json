@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_remote_ledger_v1"
+    },
+    "dispatch_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "bundle_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "bundle_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "prepared",
+        "submission_unknown",
+        "submitted",
+        "queued",
+        "running",
+        "remote_failed",
+        "downloaded",
+        "verified",
+        "cancel_requested",
+        "cancelled",
+        "cancel_unsupported",
+        "expired",
+        "remote_completed"
+      ]
+    },
+    "created_at": {
+      "type": "number"
+    },
+    "remote": {
+      "type": "object"
+    },
+    "submitted_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "accepted_result_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ledger_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "dispatch_id",
+    "request_digest",
+    "bundle_digest",
+    "bundle_sha256",
+    "profile_digest",
+    "status",
+    "created_at",
+    "remote",
+    "submitted_count",
+    "accepted_result_digest",
+    "ledger_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

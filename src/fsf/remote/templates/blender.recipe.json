@@ -1,0 +1,58 @@
+{
+  "schema_version": "fsf_remote_recipe_v1",
+  "recipe_id": "blender",
+  "version": "1",
+  "parameters": {},
+  "inputs": [
+    {
+      "artifact_id": "scene",
+      "role": "data",
+      "media_type": "application/zip"
+    }
+  ],
+  "environment": {
+    "os": "any",
+    "python": "3.12",
+    "probes": [
+      {
+        "program": "{blender}",
+        "args": [
+          "--version"
+        ],
+        "pattern": "Blender (3\\.2|4\\.3)\\.\\d+"
+      }
+    ],
+    "setup": [],
+    "models": [],
+    "credential_env_names": []
+  },
+  "steps": [
+    {
+      "step_id": "job",
+      "tool": "fsf.recipe.blender",
+      "depends_on": [],
+      "args": [
+        "{python}",
+        "-m",
+        "fsf.remote.jobs",
+        "blender",
+        "--input",
+        "{input.scene}",
+        "--out",
+        "{output.bundle}",
+        "--trusted-scene"
+      ],
+      "outputs": [
+        {
+          "artifact_id": "bundle",
+          "path": "blender.zip",
+          "role": "data",
+          "media_type": "application/zip"
+        }
+      ]
+    }
+  ],
+  "condition_capability": null,
+  "acknowledgement_output": null,
+  "recipe_digest": "8c485b2e4123cd9fabc3149747b4336f3f46442d21787a8dd78fcf6ffeb8289e"
+}

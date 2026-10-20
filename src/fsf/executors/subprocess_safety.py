@@ -493,6 +493,9 @@ def run_safe_subprocess(
     check: bool = False,
     grace_period_sec: float = 0.5,
     scrub_stdout: bool = True,
+    inherit_env: bool = True,
+    output_limit_bytes: int | None = None,
+    cancel_check: Any = None,
 ) -> SafeSubprocessResult:
     """Run a command safely with timeout, process group termination, and secret masking.
 
@@ -506,7 +509,7 @@ def run_safe_subprocess(
     cwd_str = str(cwd) if cwd is not None else None
 
     # Merge environment if provided
-    sub_env = os.environ.copy() if env is not None else None
+    sub_env = (os.environ.copy() if env is not None else None) if inherit_env else {}
     if sub_env is not None and env is not None:
         sub_env.update(env)
 
@@ -582,13 +585,22 @@ def run_safe_subprocess(
     raw_stderr = ""
 
     try:
-        raw_stdout, raw_stderr = proc.communicate(timeout=timeout_seconds)
+        if output_limit_bytes is None and cancel_check is None:
+            raw_stdout, raw_stderr = proc.communicate(timeout=timeout_seconds)
+        else:
+            raw_stdout, raw_stderr = _communicate_limited(proc, timeout_seconds, output_limit_bytes or 1024*1024, cancel_check)
     except subprocess.TimeoutExpired:
         timed_out = True
         terminate_process_tree(proc.pid, grace_period_sec=grace_period_sec, job_handle=job_handle)
         job_handle = None
         try:
-            raw_stdout, raw_stderr = proc.communicate(timeout=grace_period_sec + 2.0)
+            if output_limit_bytes is None:
+                raw_stdout, raw_stderr = proc.communicate(timeout=grace_period_sec + 2.0)
+            else:
+                # The bounded drain threads own the pipes. Never return a token
+                # fragment cut off by cancellation before full-value masking.
+                proc.wait(timeout=grace_period_sec + 2.0)
+                raw_stdout, raw_stderr = "", "Process timed out"
         except Exception:
             raw_stdout, raw_stderr = "", "Process terminated after timeout"
         finally:
@@ -672,3 +684,44 @@ def run_safe_subprocess(
         )
 
     return result
+
+
+def _communicate_limited(proc, timeout, limit, cancel_check=None):
+    """Drain both pipes with capped buffers; discard truncated secret fragments."""
+    import threading
+    if type(limit) is not int or limit < 1:
+        raise ValueError("Invalid capture limit")
+    exceeded = threading.Event()
+    buffers = [[], []]
+    def drain(stream, index):
+        size = 0
+        while True:
+            # Text pipes: a character needs at most four UTF-8 bytes.
+            chunk = stream.read(1024)
+            if not chunk:
+                break
+            size += len(chunk.encode("utf-8", errors="replace"))
+            if size > limit:
+                exceeded.set()
+            elif not exceeded.is_set():
+                buffers[index].append(chunk)
+    threads = [threading.Thread(target=drain, args=(stream, i), daemon=True)
+               for i, stream in enumerate((proc.stdout, proc.stderr))]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic()+timeout
+    while proc.poll() is None:
+        if cancel_check is not None and cancel_check():
+            raise KeyboardInterrupt()
+        if exceeded.is_set():
+            raise RuntimeError("PROCESS_OUTPUT_LIMIT")
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired("bounded process", timeout)
+        time.sleep(0.02)
+    for thread in threads:
+        thread.join(timeout=max(0.01, deadline-time.monotonic()))
+    if exceeded.is_set():
+        raise RuntimeError("PROCESS_OUTPUT_LIMIT")
+    if any(thread.is_alive() for thread in threads):
+        raise subprocess.TimeoutExpired("bounded process", timeout)
+    return "".join(buffers[0]), "".join(buffers[1])

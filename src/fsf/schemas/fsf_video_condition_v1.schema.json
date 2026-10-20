@@ -1,0 +1,119 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_video_condition_v1"
+    },
+    "control_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "const": "control_video"
+        },
+        "media_type": {
+          "const": "video/mp4"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        }
+      },
+      "required": [
+        "path",
+        "role",
+        "media_type",
+        "sha256",
+        "size_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24000
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1001
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "additionalProperties": false
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 96
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "frame_mapping_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "preprocess": {
+      "const": "none"
+    },
+    "condition_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "control_id",
+    "revision",
+    "manifest_digest",
+    "artifact",
+    "clock",
+    "frame_count",
+    "width",
+    "height",
+    "frame_mapping_digest",
+    "required",
+    "preprocess",
+    "condition_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

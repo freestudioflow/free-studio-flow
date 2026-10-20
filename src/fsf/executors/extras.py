@@ -160,6 +160,22 @@ def executor_from_row(row: dict[str, Any], *, source: str, index: int) -> BaseVi
             f"{source} executor[{index}] unknown tool_name {tool_name!r}. Known: {known}"
         )
 
+    if row.get("kind") == "model_api":
+        allowed={"executor_id","transport","tool_name","kind","profile","state_root","parameters","input_files","binding"}
+        if set(row)-allowed:raise ValueError("Model API executor has unknown fields")
+        from fsf.remote.api_executor import ModelAPIExecutor
+        return ModelAPIExecutor(executor_id=executor_id,tool_name=tool_name,**{k:v for k,v in row.items()
+            if k not in {"executor_id","transport","tool_name","kind"}})
+
+    if row.get("kind") == "remote":
+        allowed = {"executor_id", "transport", "tool_name", "kind", "profile", "recipe", "worker_wheel", "state_root",
+                   "output_id", "parameters", "parameter_bindings", "input_files"}
+        if set(row)-allowed:
+            raise ValueError("Remote executor has unknown fields")
+        from fsf.remote.executor import RemoteExecutor
+        return RemoteExecutor(executor_id=executor_id, tool_name=tool_name, **{k:v for k,v in row.items()
+            if k not in {"executor_id","transport","tool_name","kind"}})
+
     # Process Command Executor
     if row.get("kind") == "process" or "command_args" in row:
         raw_args = row.get("command_args")

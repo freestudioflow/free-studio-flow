@@ -59,6 +59,10 @@ class PlanExecutor:
         handoff: bool = False,
         job_id: str | None = None,
         run_id: str | None = None,
+        source_executions: dict | None = None,
+        audio_resources: dict | None = None,
+        recovery_policy: dict | None = None,
+        resume_paused: bool = False,
     ) -> None:
         self.output_dir = Path(output_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +72,15 @@ class PlanExecutor:
         self.handoff = bool(handoff)
         self.job_id = str(job_id) if job_id else None
         self.run_id = str(run_id) if run_id else None
+        self.audio_resources = audio_resources
+        self.source_executions = source_executions
+        self.recovery_policy = recovery_policy
+        self.resume_paused = resume_paused
+        self._recovery_controller = None
+        self._recovery_force = set()
+        self._recovery_attempt = 1
+        self._post_context = None
+        self.generation_dispatches = {"process": 0, "api": 0, "handoff": 0}
         self.current_job_id: str = ""
         self.current_run_id: str = ""
         self.current_plan_digest: str = ""
@@ -407,6 +420,10 @@ class PlanExecutor:
         kind = step.get("kind")
         inputs = step.get("inputs", {})
 
+        if self._post_context is not None:
+            return (canonical_contract_digest({"step": step, "bindings": self._post_context.bindings}),
+                    canonical_contract_digest({"engine": "fsf_edit_post_v1", "tool": self._post_context.version}), None)
+
         if kind == "tool":
             tool = step.get("tool", "")
             if tool == "pdx.media.technical_conform":
@@ -559,9 +576,22 @@ class PlanExecutor:
 
     def execute_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         """Execute all steps in a validated pdx_execution_plan_v1 according to DAG order."""
+        if self.recovery_policy is not None and self._recovery_controller is None:
+            if validate_execution_plan(plan):
+                raise ValueError("Invalid execution plan")
+            if self.source_executions is not None or plan.get("producer", {}).get("name") == "fsf.runtime.post_plan":
+                raise ValueError("Recovery policy is only supported for production plans")
+            from fsf.runtime.recovery import execute_recoverable
+            return execute_recoverable(self, plan)
+        if self._post_context is None and (self.source_executions is not None or plan.get("producer", {}).get("name") == "fsf.runtime.post_plan"
+                or any(s.get("transform", "").startswith("fsf.edit.") for s in plan.get("steps", []))):
+            from fsf.runtime.post_runtime import execute_post
+            return execute_post(self, plan)
         errors = validate_execution_plan(plan)
         if errors:
             raise ValueError(f"Invalid pdx_execution_plan_v1:\n" + "\n".join(errors))
+
+        self.generation_dispatches = {"process": 0, "api": 0, "handoff": 0}
 
         plan_digest = canonical_contract_digest(plan)
         self.current_plan_digest = plan_digest
@@ -654,6 +684,13 @@ class PlanExecutor:
                 }
                 continue
 
+            if self._post_context is not None:
+                try:
+                    self._post_context.check()
+                except Exception:
+                    step_results[step_id] = {"id": step_id, "kind": step.get("kind"), "status": "blocked", "error": "POST_LIVE_GATE"}
+                    continue
+
             # ── C1: Resolve execution context BEFORE digest / resume ──────────
             # Resolution must precede _compute_step_digests() so that
             # execution_context_digest (which covers effective_prompt,
@@ -719,7 +756,7 @@ class PlanExecutor:
             # approved may have had its reviews withdrawn; reusing the assembled
             # output without re-checking would silently deliver an unapproved product.
             reused = False
-            if prior_journal and deps_all_reused and step.get("kind") == "transform":
+            if prior_journal and deps_all_reused and step.get("kind") == "transform" and self._post_context is None:
                 _art_inputs = step.get("inputs", {}).get("artifact_inputs", [])
                 _resolved_resume, _res_errors = self._resolve_assembly_inputs(
                     _art_inputs, step_results
@@ -758,7 +795,7 @@ class PlanExecutor:
                     continue
             if prior_journal and deps_all_reused:
                 prior_step = prior_journal.get("steps", {}).get(step_id)
-                if prior_step and prior_step.get("status") == "completed":
+                if prior_step and prior_step.get("status") == "completed" and step_id not in self._recovery_force:
                     # Check executor config & inputs digest match exactly
                     inputs_match = (
                         prior_step.get("inputs_digest") == curr_inputs_digest
@@ -798,6 +835,9 @@ class PlanExecutor:
                                 outputs_valid = False
 
                         if outputs_valid:
+                            if hasattr(resolved_executor, "validate_resume") and not resolved_executor.validate_resume(prior_step):
+                                outputs_valid = False
+                        if outputs_valid:
                             reused = True
                             output_artifacts = [str(self.output_dir / f["path"]) for f in prior_out_files]
                             step_results[step_id] = {
@@ -814,6 +854,8 @@ class PlanExecutor:
                                 "output_files": prior_out_files,
                                 "output_artifacts": output_artifacts,
                             }
+                            if prior_step.get("remote_provenance"):
+                                step_results[step_id]["remote_provenance"] = copy.deepcopy(prior_step["remote_provenance"])
                             # Re-carry verified consistency acknowledgement from
                             # prior journal so review tooling can access it on resume.
                             if prior_step.get("consistency_acknowledgement"):
@@ -844,6 +886,8 @@ class PlanExecutor:
                     resolved_execution_context=resolved_execution_context,
                 )
                 res["inputs_digest"] = curr_inputs_digest
+                if self._post_context is not None and res.get("error"):
+                    res["error"] = "POST_STEP_FAILED"
                 res["executor_config_digest"] = curr_exec_digest
                 if resolved_executor:
                     res["executor_id"] = resolved_executor.executor_id
@@ -887,7 +931,8 @@ class PlanExecutor:
                         res["output_files"] = eager_out_files
                 step_results[step_id] = res
             except Exception as exc:
-                clean_err = sanitize_process_text(str(exc))
+                clean_err = (getattr(exc, "code", "POST_STEP_FAILED") if self._post_context is not None
+                             else sanitize_process_text(str(exc)))
                 failed_entry: dict[str, Any] = {
                     "id": step_id,
                     "kind": step.get("kind"),
@@ -896,6 +941,8 @@ class PlanExecutor:
                     "inputs_digest": curr_inputs_digest,
                     "executor_config_digest": curr_exec_digest,
                 }
+                if getattr(exc, "code", None):
+                    failed_entry["error_code"] = exc.code
                 # Preserve attempt/workorder identity so rejected results can be re-dispatched.
                 attempt_hint = getattr(exc, "attempt_id", None)
                 workorder_hint = getattr(exc, "workorder_id", None)
@@ -921,6 +968,9 @@ class PlanExecutor:
                     failed_entry["workorder_id"] = str(workorder_hint)
                 step_results[step_id] = failed_entry
 
+            if self._recovery_controller:
+                self._recovery_controller.checkpoint(step_results)
+
         # 4. Compile overall result & save journal
         completed_count = sum(1 for s in step_results.values() if s.get("status") == "completed")
         reused_count = sum(1 for s in step_results.values() if s.get("status") == "reused")
@@ -928,7 +978,11 @@ class PlanExecutor:
         blocked_count = sum(1 for s in step_results.values() if s.get("status") == "blocked")
         pending_handoff_count = sum(1 for s in step_results.values() if s.get("status") == "pending_handoff")
 
-        if failed_count == 0 and pending_handoff_count > 0:
+        pending_external_count = sum(1 for s in step_results.values() if s.get("status") == "pending_external")
+        if failed_count == 0 and pending_external_count > 0:
+            overall_status = "waiting_external"
+            all_ok = False
+        elif failed_count == 0 and pending_handoff_count > 0:
             overall_status = "pending_handoff"
             all_ok = False
         elif failed_count == 0 and blocked_count == 0:
@@ -975,6 +1029,8 @@ class PlanExecutor:
                 }
                 if sdata.get("attempt_id") is not None:
                     journal_steps[sid]["attempt_id"] = sdata["attempt_id"]
+                if sdata.get("remote_provenance"):
+                    journal_steps[sid]["remote_provenance"] = copy.deepcopy(sdata["remote_provenance"])
                 if sdata.get("workorder_id"):
                     journal_steps[sid]["workorder_id"] = sdata["workorder_id"]
                 # Persist verified consistency acknowledgement for downstream review.
@@ -995,13 +1051,17 @@ class PlanExecutor:
                 }
                 if sdata.get("attempt_id") is not None:
                     journal_steps[sid]["attempt_id"] = sdata["attempt_id"]
+                if sdata.get("remote_provenance"):
+                    journal_steps[sid]["remote_provenance"] = copy.deepcopy(sdata["remote_provenance"])
                 if sdata.get("workorder_id"):
                     journal_steps[sid]["workorder_id"] = sdata["workorder_id"]
-            elif sdata.get("status") == "pending_handoff":
+            elif sdata.get("status") in {"pending_handoff", "pending_external"}:
                 journal_steps[sid] = {
-                    "status": "pending_handoff",
+                    "status": sdata["status"],
                     "kind": sdata.get("kind"),
                 }
+                if sdata.get("resume_identity"):
+                    journal_steps[sid]["resume_identity"] = copy.deepcopy(sdata["resume_identity"])
                 if sdata.get("attempt_id") is not None:
                     journal_steps[sid]["attempt_id"] = sdata["attempt_id"]
                 if sdata.get("workorder_id"):
@@ -1016,7 +1076,8 @@ class PlanExecutor:
             "source_sha256": source_sha,
             "steps": journal_steps,
         }
-        journal_path.write_text(json.dumps(journal_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        from fsf.remote.contracts import write_json
+        write_json(journal_path,journal_payload)
 
         return {
             "schema_version": "fsf_plan_execution_result_v1",
@@ -1045,6 +1106,8 @@ class PlanExecutor:
     ) -> dict[str, Any]:
         """Dispatch a single step by kind."""
         kind = step.get("kind")
+        if self._recovery_controller:
+            self._recovery_controller.before(step)
         if kind == "tool":
             return self._execute_tool_step(
                 step,
@@ -1094,13 +1157,19 @@ class PlanExecutor:
                 }
 
             expected = inputs.get("expected_media_contract")
-            report, _host_action = evaluate_media_file(target_path, expected)
+            from fsf.conformance.media import evaluate_media_with_receipt
+            report, _host_action, media_receipt = evaluate_media_with_receipt(target_path, expected)
 
             report_out = step.get("outputs", [f"report:{step_id}.json"])[0]
             clean_rep_name = report_out.replace("report:", "")
             rep_path = self.output_dir / clean_rep_name
             rep_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
             self._artifact_registry[report_out] = rep_path
+            evidence_outputs = [str(rep_path)]
+            if media_receipt is not None:
+                evidence_path = rep_path.with_name(rep_path.name + ".evidence.json")
+                evidence_path.write_text(json.dumps(media_receipt, indent=2), encoding="utf-8")
+                evidence_outputs.append(str(evidence_path))
 
             eval_status = report.get("evaluation_status")
             schema_ver = report.get("schema_version")
@@ -1123,6 +1192,7 @@ class PlanExecutor:
                     "tool": tool,
                     "status": "failed",
                     "error": f"Media technical conformance check failed with status: {eval_status}",
+                    "evaluation_status": eval_status,
                     "report_path": str(rep_path),
                     "output_artifacts": [str(rep_path)],
                 }
@@ -1133,7 +1203,7 @@ class PlanExecutor:
                 "tool": tool,
                 "status": "completed",
                 "report_path": str(rep_path),
-                "output_artifacts": [str(rep_path)],
+                "output_artifacts": evidence_outputs,
             }
 
         # B. Asynchronous External Handoff Tool Step
@@ -1228,6 +1298,8 @@ class PlanExecutor:
             )
 
             current_attempt = (latest_existing + 1) if prior_failed else latest_existing
+            if self._recovery_controller:
+                current_attempt = self._recovery_attempt
 
             wo = build_workorder(
                 job_id=self.current_job_id,
@@ -1257,7 +1329,8 @@ class PlanExecutor:
             if res_file:
                 prior_sha = None
                 if prior_journal:
-                    p_info = prior_journal.get("steps", {}).get(step_id, {}).get("output_files", [])
+                    accepted_prior = prior_journal.get("steps", {}).get(step_id, {})
+                    p_info = accepted_prior.get("output_files", []) if accepted_prior.get("attempt_id") == current_attempt else []
                     if p_info:
                         prior_sha = p_info[0].get("sha256")
 
@@ -1317,6 +1390,9 @@ class PlanExecutor:
                     }
 
             # Emit workorder and return pending_handoff
+            existing_workorder = self.output_dir / "handoff" / "workorders" / f"{wo['workorder_id']}.workorder.json"
+            if not existing_workorder.exists():
+                self.generation_dispatches["handoff"] += 1
             wo_path = write_workorder(wo, self.output_dir)
             return {
                 "id": step_id,
@@ -1416,7 +1492,36 @@ class PlanExecutor:
             "execution_context": execution_context,
         }
 
+        execution_kind = getattr(executor, "execution_kind", None)
+        if self._recovery_controller:
+            task["request_id"] += f":att{self._recovery_attempt}"
+            task["generation_attempt"] = self._recovery_attempt
+            task["resume_paused"] = self.resume_paused
+            task["cooperative_wait"] = True
+        if execution_kind == "remote" or getattr(executor,"requires_model_contract",False):
+            expected = None
+            for qc in self._steps_by_id.values():
+                if qc.get("tool") == "pdx.media.technical_conform" and qc.get("inputs", {}).get("target_artifact") in declared_outputs:
+                    expected = qc["inputs"].get("expected_media_contract")
+                    break
+            requirements = build_consistency_requirements(execution_context) if execution_context else None
+            task["remote_parent"] = {"job_id": self.current_job_id, "run_id": self.current_run_id, "step_id": step_id,
+                "attempt_id": self._recovery_attempt if self._recovery_controller else 1,
+                "plan_digest": self.current_plan_digest, "inputs_digest": inputs_digest,
+                "expected_contract_digest": canonical_contract_digest(expected) if expected is not None else None,
+                "requirements_digest": requirements["requirements_digest"] if requirements else None}
+            task["remote_expected_media_contract"] = expected
+            task["remote_consistency_requirements"] = requirements
+            task["video_condition"] = inputs.get("video_condition")
+        if tool.startswith("studio.") and execution_kind in ("process", "api") and not getattr(executor,"requires_model_contract",False):
+            self.generation_dispatches[execution_kind] += 1
         tool_result = executor.execute_shot(task, self.output_dir)
+        if getattr(executor,"requires_model_contract",False):
+            self.generation_dispatches["api"] += getattr(executor,"last_submitted_delta",0)
+        remote_provenance = copy.deepcopy(getattr(executor, "last_provenance", None))
+        if execution_kind == "remote" and remote_provenance:
+            transport = remote_provenance["provider"]
+            self.generation_dispatches[transport] = self.generation_dispatches.get(transport, 0) + executor.last_submitted_delta
         art_file = tool_result.get("outputs", {}).get("artifact_file")
         out_path = self.output_dir / art_file if art_file else None
 
@@ -1428,9 +1533,14 @@ class PlanExecutor:
             "id": step_id,
             "kind": "tool",
             "tool": tool,
-            "status": "completed" if tool_result.get("status") == "completed" else "failed",
+            "status": tool_result["status"] if tool_result.get("status") in {"completed","pending_external"} else "failed",
+            **({"resume_identity":tool_result["resume_identity"]} if tool_result.get("resume_identity") else {}),
             "tool_result": tool_result,
+            **({"error":tool_result.get("error","Executor did not complete")} if tool_result.get("status")!="completed" else {}),
             "output_artifacts": [str(out_path)] if out_path and out_path.is_file() else [],
+            **({"remote_provenance": remote_provenance} if remote_provenance else {}),
+            **({"consistency_acknowledgement": remote_provenance["consistency_acknowledgement"]}
+               if remote_provenance and remote_provenance.get("consistency_acknowledgement") else {}),
         }
 
     def _resolve_assembly_inputs(
@@ -1695,6 +1805,15 @@ class PlanExecutor:
         transform = step.get("transform", "")
         step_id = step["id"]
         inputs = step.get("inputs", {})
+
+        if self._post_context is not None:
+            from fsf.runtime.post_sources import PostError
+            try:
+                return self._post_context.execute(step, self.output_dir)
+            except (PostError, __import__("fsf.core.audio_edit", fromlist=["AudioError"]).AudioError):
+                raise
+            except Exception:
+                raise PostError("POST_OPERATION_FAILED") from None
 
         if transform != "fsf.assembly.fast_concat":
             raise ValueError(f"Unsupported transform '{transform}' in step '{step_id}'")

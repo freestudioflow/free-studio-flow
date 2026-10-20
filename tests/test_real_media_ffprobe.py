@@ -254,6 +254,10 @@ def test_ensure_media_tools_preserves_raw_user_paths(tmp_path: Path, monkeypatch
     import fsf.conformance.media as media_mod
     from fsf.executors.subprocess_safety import SafeSubprocessResult
 
+    # Discovery mutates PATH itself; register the original value for teardown
+    # so the synthetic executable cannot leak into subsequent real-media tests.
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
+
     exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
     user_ffmpeg = tmp_path / "user_home" / exe_name
     user_ffmpeg.parent.mkdir(parents=True)

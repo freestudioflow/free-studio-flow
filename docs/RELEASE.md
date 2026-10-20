@@ -12,6 +12,25 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Release notes (0.1.0rc7 — release candidate)
+
+Source version `0.1.0rc7` is a release candidate and has not yet been tagged or
+published. These additions are not part of the published rc6 distributions:
+
+- Locate and edit clips by stable IDs and revision-bound patches, with explicit
+  subtitle timing and independent post-production plans for verified sources.
+- Mix selected audio tracks and ranges, with optional loudness normalization,
+  encoded-output peak checks and A/B previews. Numeric checks do not replace
+  listening review.
+- Render trusted small Blender scenes, export reference images and clay motion
+  controls, and import existing control videos without implicit conversion.
+- Register immutable asset versions and verify fixed-version lookups.
+- Dispatch approved parent/worker recipes through local, HTTP, SSH and private
+  CPU Kaggle transports, with verified result collection and bounded recovery.
+- Configure typed text and media API profiles, host credential bindings and
+  per-shot QC retries. Provider/model capabilities and manual review remain
+  separate requirements; text support does not imply every media type.
+
 ## Release notes (0.1.0rc6)
 
 - Add DOCX metadata for stable task IDs, asset references, continuity aspects and
@@ -121,10 +140,10 @@ them private and exclude them from release attachments.
 .\.venv\Scripts\python.exe -m twine check dist\*
 ```
 
-Published artifacts for `0.1.0rc6`:
+Release candidate distribution filenames for `0.1.0rc7` (not yet published):
 
-- `dist/free_studio_flow-0.1.0rc6-py3-none-any.whl`
-- `dist/free_studio_flow-0.1.0rc6.tar.gz`
+- `dist/free_studio_flow-0.1.0rc7-py3-none-any.whl`
+- `dist/free_studio_flow-0.1.0rc7.tar.gz`
 
 For future releases, build from the final commit and publish the approved
 distributions unchanged to GitHub Releases and PyPI. PyPI publication requires
@@ -148,9 +167,8 @@ Create a pending or existing-project Trusted Publisher with:
 - Environment: `pypi`
 
 Protect the `pypi` GitHub environment with a required reviewer
-(Settings → Environments → `pypi`). Enable “Allow GitHub Actions to create
-and approve pull requests” so the README follow-up PR can open. No
-long-lived PyPI token belongs in repository secrets. Creating a GitHub Release
+(Settings → Environments → `pypi`). No long-lived PyPI token belongs in
+repository secrets. Creating a GitHub Release
 does not trigger publication. To promote an approved release, run
 **Publish release assets to PyPI** manually with its exact tag.
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": "fsf_remote_profile_v1",
+  "profile_id": "ssh_worker",
+  "transport": "ssh",
+  "authorized": false,
+  "approved_recipes": [],
+  "policy": {
+    "cpu": 2,
+    "gpu": false,
+    "ram_mb": 4096,
+    "disk_mb": 2048,
+    "deadline_seconds": 600,
+    "network_sources": [
+      "https://pypi.org/simple"
+    ],
+    "credential_env_names": []
+  },
+  "settings": {
+    "host_alias": "approved-worker",
+    "known_hosts": "known_hosts",
+    "ssh_config": "ssh_config",
+    "remote_root": "/workspace/fsf-worker",
+    "python": "python3"
+  }
+}

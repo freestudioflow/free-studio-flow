@@ -1,0 +1,172 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_library_asset_record_v2"
+    },
+    "asset_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "asset_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "digest_version": {
+      "const": "fsf_library_asset_record_digest_v2"
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "record_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_prompt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Shape is an open non-empty string; v1 library registration applies the explicitly documented semantic allowlist. Existing rc6 job-local kinds are not implicitly coerced."
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "preserve": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "forbid": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "preserve",
+        "forbid",
+        "unresolved"
+      ],
+      "additionalProperties": false
+    },
+    "ref_images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "description": "Semantic reference category; the referenced artifact must separately have the reference_image usage role.",
+            "enum": [
+              "character",
+              "scene",
+              "prop",
+              "style"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "role",
+          "sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "role": {
+            "enum": [
+              "model",
+              "scene",
+              "texture",
+              "reference_image",
+              "audio",
+              "animation",
+              "other",
+              "control_video",
+              "control_frame"
+            ]
+          },
+          "logical_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "artifact_id",
+          "role",
+          "logical_path",
+          "media_type",
+          "sha256",
+          "size_bytes",
+          "locator"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "primary_artifact_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+      "description": "Runtime registration validator MUST find exactly one matching artifacts[].artifact_id before atomic publication. JSON Schema does not enforce this cross-field relationship."
+    }
+  },
+  "required": [
+    "schema_version",
+    "asset_id",
+    "asset_version",
+    "digest_version",
+    "content_hash",
+    "record_digest",
+    "source_prompt",
+    "kind",
+    "constraints",
+    "ref_images",
+    "artifacts",
+    "primary_artifact_id"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Library asset record; file integrity is not media or model conformance"
+}

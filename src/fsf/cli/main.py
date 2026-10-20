@@ -74,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"fsf {__version__}",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    subparsers.add_parser("edit", help="Versioned edits and post-production from verified sources")
+    subparsers.add_parser("remote", help="Approved parent/worker dispatch and lifecycle operations")
+    subparsers.add_parser("api", help="Typed model API profiles and verified outputs")
+    subparsers.add_parser("blender", help="Controlled Blender and external control-video workflows")
+    subparsers.add_parser("asset", help="Immutable asset registration and lookup")
 
     # intake (M1)
     intake_cmd = subparsers.add_parser(
@@ -90,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compile a DOCX prompt sheet into a pdx_execution_plan_v1",
     )
     plan_cmd.add_argument("docx", help="Path to Word DOCX prompt sheet")
+    plan_cmd.add_argument("--post-sources", action="store_true", help="Add media QC for every video producer, including remaster and VFX")
     plan_cmd.add_argument("--tool", default="studio.video.generate", help="Executor tool identifier")
     plan_cmd.add_argument(
         "--pipeline",
@@ -147,6 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     execute_cmd.add_argument("plan_file", help="Path to pdx_execution_plan_v1 JSON plan file")
     execute_cmd.add_argument("--out", "-o", default="output/execute", help="Output directory for execution artifacts")
     execute_cmd.add_argument("--no-resume", action="store_true", help="Force re-execution of all steps")
+    execute_cmd.add_argument("--recovery-policy", help="Authorized bounded per-shot QC retry policy JSON")
+    execute_cmd.add_argument("--resume-paused", action="store_true", help="Explicitly resume configured auth/quota pauses; never replay unknown submissions")
     execute_cmd.add_argument("--executor", default=None, help="Optional executor override ID")
     execute_cmd.add_argument(
         "--handoff",
@@ -155,6 +163,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     execute_cmd.add_argument("--job-id", default=None, help="Explicit job ID for workorder authority binding")
     execute_cmd.add_argument("--run-id", default=None, help="Explicit run ID for workorder authority binding")
+    execute_cmd.add_argument("--audio-resources", default=None, help="Operator-controlled audio resource map")
+    execute_cmd.add_argument("--source-executions", default=None, help="Operator-controlled source execution map for post-production plans")
 
     # workorder (Handoff inspection)
     wo_cmd = subparsers.add_parser(
@@ -837,6 +847,22 @@ def handle_review(args: argparse.Namespace) -> int:
 def handle_execute(args: argparse.Namespace) -> int:
     from fsf.runtime.plan_executor import PlanExecutor
 
+    if getattr(args, "source_executions", None):
+        from fsf.core.edit_store import read_json
+        try:
+            plan_data = read_json(args.plan_file)
+            sources = read_json(args.source_executions)
+            executor = PlanExecutor(args.out, no_resume=args.no_resume, executor_override=args.executor,
+                                    handoff=args.handoff, job_id=args.job_id, run_id=args.run_id, source_executions=sources, audio_resources=read_json(args.audio_resources) if args.audio_resources else None)
+            result = executor.execute_plan(plan_data)
+        except KeyboardInterrupt:
+            print(json.dumps({"status":"cancelled","success":False,"error":"POST_CANCELLED"},ensure_ascii=True))
+            return 130
+        except Exception:
+            result = {"status": "blocked", "success": False, "error": "POST_INVALID"}
+        print(json.dumps(result, ensure_ascii=True))
+        return 0 if result.get("success") else 2
+
     plan_path = Path(args.plan_file).resolve()
     if not plan_path.is_file():
         print(f"[FSF Execute Error] Plan file not found: {plan_path}", file=sys.stderr)
@@ -849,6 +875,12 @@ def handle_execute(args: argparse.Namespace) -> int:
         return 1
 
     out_dir = Path(args.out).resolve()
+    try:
+        from fsf.core.edit_store import read_json
+        recovery_policy=read_json(args.recovery_policy) if getattr(args,"recovery_policy",None) else None
+    except Exception:
+        print(json.dumps({"status":"failed","success":False,"error":"RECOVERY_POLICY_INVALID"}))
+        return 2
     executor = PlanExecutor(
         out_dir,
         no_resume=args.no_resume,
@@ -856,6 +888,8 @@ def handle_execute(args: argparse.Namespace) -> int:
         handoff=getattr(args, "handoff", False),
         job_id=getattr(args, "job_id", None),
         run_id=getattr(args, "run_id", None),
+        recovery_policy=recovery_policy,
+        resume_paused=getattr(args,"resume_paused",False),
     )
 
     try:
@@ -880,6 +914,9 @@ def handle_execute(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 10
+    elif status in {"waiting_external","paused_auth","paused_quota","paused_unknown","paused_batch","exhausted"}:
+        print(f"[FSF Execute] Delivery blocked: {status}.",file=sys.stderr)
+        return 2
     else:
         print(
             f"[FSF Execute] Failed: {result.get('failed_count')} failed, "
@@ -890,6 +927,19 @@ def handle_execute(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "api":
+        from fsf.cli.model_api import main as model_api_main
+        return model_api_main(arguments[1:])
+    if arguments and arguments[0] == "remote":
+        from fsf.cli.remote import main as remote_main
+        return remote_main(arguments[1:])
+    if arguments and arguments[0] in {"blender", "asset"}:
+        from fsf.cli.blender import main as blender_main
+        return blender_main(arguments[1:], assets=arguments[0] == "asset")
+    if arguments and arguments[0] == "edit":
+        from fsf.cli.edit import main as edit_main
+        return edit_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -920,6 +970,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("[FSF Plan Error] Cannot specify both --media and --shape", file=sys.stderr)
                 return 2
             shape_mode = not getattr(args, "media", False)
+            if getattr(args, "post_sources", False) and shape_mode:
+                print("[FSF Plan Error] --post-sources requires --media", file=sys.stderr)
+                return 2
             manifest, _, _ = compile_job(docx_path)
             plan = build_execution_plan(
                 manifest,
@@ -931,6 +984,7 @@ def main(argv: list[str] | None = None) -> int:
                 subtitle_policy=getattr(args, "subtitles", "none"),
                 bgm_artifact=getattr(args, "bgm", None),
                 audio_policy=getattr(args, "audio", "keep"),
+                enable_post_source_qc=getattr(args, "post_sources", False),
             )
             if args.out:
                 Path(args.out).write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")

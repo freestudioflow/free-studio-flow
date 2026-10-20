@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_source_executions_v1"
+    },
+    "executions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "job": {
+            "type": "string",
+            "minLength": 1
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1
+          },
+          "journal": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "execution_id",
+          "root",
+          "job",
+          "plan",
+          "journal"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "executions"
+  ],
+  "additionalProperties": false
+}

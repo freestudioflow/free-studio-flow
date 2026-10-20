@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authorized", "max_attempts", "max_dispatches", "max_new_dispatches_per_run", "deadline_seconds"],
+  "properties": {
+    "schema_version": {"const": "fsf_generation_recovery_policy_v1"},
+    "authorized": {"const": true},
+    "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+    "max_dispatches": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "max_new_dispatches_per_run": {"type": "integer", "minimum": 1, "maximum": 100},
+    "deadline_seconds": {"type": "integer", "minimum": 1, "maximum": 86400}
+  }
+}

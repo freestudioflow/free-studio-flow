@@ -1,0 +1,52 @@
+{
+  "schema_version": "fsf_remote_recipe_v1",
+  "recipe_id": "ffmpeg-video",
+  "version": "1",
+  "parameters": {},
+  "inputs": [],
+  "environment": {
+    "os": "any",
+    "python": "3.12",
+    "probes": [],
+    "setup": [],
+    "models": [],
+    "credential_env_names": []
+  },
+  "steps": [
+    {
+      "step_id": "job",
+      "tool": "studio.video.generate",
+      "depends_on": [],
+      "args": [
+        "{ffmpeg}",
+        "-nostdin",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=64x64:rate=24",
+        "-frames:v",
+        "24",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "{output.video}"
+      ],
+      "outputs": [
+        {
+          "artifact_id": "video",
+          "path": "video.mp4",
+          "role": "video",
+          "media_type": "video/mp4"
+        }
+      ]
+    }
+  ],
+  "condition_capability": null,
+  "acknowledgement_output": null,
+  "recipe_digest": "b0696e0043d35a364feeb2801337e345a982a49b2292b2ee1781e467ca8b442a"
+}

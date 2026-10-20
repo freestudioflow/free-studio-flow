@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_post_source_manifest_v1"
+    },
+    "edit_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "source_ref": {
+            "type": "object",
+            "properties": {
+              "source_execution_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              "source_job_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_run_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_plan_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "source_journal_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "producer_step_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              "artifact_ref": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact declared output in the original production plan."
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "purpose": {
+                "const": "video"
+              }
+            },
+            "required": [
+              "source_execution_id",
+              "source_job_id",
+              "source_run_id",
+              "source_plan_digest",
+              "source_journal_digest",
+              "producer_step_id",
+              "artifact_ref",
+              "artifact_sha256",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          "artifact_ref": {
+            "type": "string",
+            "description": "Named materialized output in this post-production attempt, not the original source output."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "review_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "source_id",
+          "source_ref",
+          "artifact_ref",
+          "sha256",
+          "size_bytes",
+          "review_digest"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "edit_digest",
+    "bindings"
+  ],
+  "additionalProperties": false
+}

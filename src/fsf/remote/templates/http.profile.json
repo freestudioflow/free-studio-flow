@@ -1,0 +1,22 @@
+{
+  "schema_version": "fsf_remote_profile_v1",
+  "profile_id": "http_worker",
+  "transport": "http",
+  "authorized": false,
+  "approved_recipes": [],
+  "policy": {
+    "cpu": 2,
+    "gpu": false,
+    "ram_mb": 4096,
+    "disk_mb": 2048,
+    "deadline_seconds": 600,
+    "network_sources": [
+      "https://pypi.org/simple"
+    ],
+    "credential_env_names": []
+  },
+  "settings": {
+    "endpoint": "http://127.0.0.1:8765",
+    "auth_env": "FSF_WORKER_TOKEN"
+  }
+}

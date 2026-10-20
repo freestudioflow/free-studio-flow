@@ -1,0 +1,46 @@
+{
+  "schema_version": "fsf_remote_recipe_v1",
+  "recipe_id": "model-candidate",
+  "version": "1",
+  "parameters": {
+    "prompt": {
+      "type": "string"
+    }
+  },
+  "inputs": [],
+  "environment": {
+    "os": "any",
+    "python": "3.12",
+    "probes": [],
+    "setup": [],
+    "models": [],
+    "credential_env_names": []
+  },
+  "steps": [
+    {
+      "step_id": "job",
+      "tool": "fsf.recipe.model-candidate",
+      "depends_on": [],
+      "args": [
+        "{python}",
+        "-m",
+        "approved_model_backend",
+        "--prompt",
+        "{param.prompt}",
+        "--out",
+        "{output.video}"
+      ],
+      "outputs": [
+        {
+          "artifact_id": "video",
+          "path": "video.mp4",
+          "role": "video",
+          "media_type": "video/mp4"
+        }
+      ]
+    }
+  ],
+  "condition_capability": null,
+  "acknowledgement_output": null,
+  "recipe_digest": "40681807e63744e2efd2229ace11fb78ad4abfdc86932cf0b97b1cfef22a287d"
+}

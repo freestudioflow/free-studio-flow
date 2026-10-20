@@ -142,6 +142,7 @@ class ProcessCommandExecutor(BaseVideoExecutor):
                 "{input_video}": input_video,
                 "{duration}": f"{duration:.3f}",
                 "{duration_int}": str(int(round(duration))),
+                "{generation_attempt}": str(task.get("generation_attempt",1)),
             }
 
             resolved_args: list[str] = []

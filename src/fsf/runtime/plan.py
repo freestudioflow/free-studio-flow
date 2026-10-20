@@ -207,6 +207,7 @@ def build_execution_plan(
     subtitle_policy: str = "none",
     bgm_artifact: str | None = None,
     audio_policy: str = "keep",
+    enable_post_source_qc: bool = False,
 ) -> dict[str, Any]:
     """Compile an fsf_video_job_v1 into a pdx_execution_plan_v1.
 
@@ -222,6 +223,8 @@ def build_execution_plan(
       - True (default): outputs are contract-shape stubs (.shape.bin)
       - False: outputs are media filenames (.mp4, .png, etc.)
     """
+    if enable_post_source_qc and not enable_media_conformance:
+        raise ValueError("Post-production sources require media QC")
     source_doc = job_manifest.get("source_document", "unknown.docx")
     source_sha = job_manifest.get("source_sha256", "")
     request_id = f"req:fsf:plan:{source_doc}:{source_sha[:12]}"
@@ -344,7 +347,7 @@ def build_execution_plan(
             last_id = step_id
             step_num += 1
 
-            if enable_media_conformance and tool == "studio.video.generate":
+            if enable_media_conformance and (tool == "studio.video.generate" or enable_post_source_qc and tool in ("studio.video.remaster", "studio.video.vfx")):
                 conf_step_id = f"step_{step_num:03d}_qc_{shot_id}"
                 expected_contract = dict(expected_contract_for_task(task))
 

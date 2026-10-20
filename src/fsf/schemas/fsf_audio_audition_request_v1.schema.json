@@ -1,0 +1,78 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_audio_audition_request_v1"
+    },
+    "edit_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "before_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "before_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "after_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "after_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "clip_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "start_frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "end_frame": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "projection_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "listen_scope": {
+      "enum": [
+        "mix",
+        "track_solo"
+      ]
+    },
+    "track_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "edit_id",
+    "before_revision",
+    "before_digest",
+    "after_revision",
+    "after_digest",
+    "clip_id",
+    "start_frame",
+    "end_frame",
+    "projection_digest",
+    "listen_scope",
+    "track_id"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fsf_audio_audition_request_v1"
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "fsf_remote_recipe_v1",
+  "recipe_id": "cpu",
+  "version": "1",
+  "parameters": {
+    "value": {
+      "type": "integer",
+      "minimum": -1000,
+      "maximum": 1000
+    }
+  },
+  "inputs": [],
+  "environment": {
+    "os": "any",
+    "python": "3.12",
+    "probes": [],
+    "setup": [],
+    "models": [],
+    "credential_env_names": []
+  },
+  "steps": [
+    {
+      "step_id": "job",
+      "tool": "fsf.recipe.cpu",
+      "depends_on": [],
+      "args": [
+        "{python}",
+        "-m",
+        "fsf.remote.jobs",
+        "cpu",
+        "--value",
+        "{param.value}",
+        "--out",
+        "{output.result}"
+      ],
+      "outputs": [
+        {
+          "artifact_id": "result",
+          "path": "result.json",
+          "role": "data",
+          "media_type": "application/json"
+        }
+      ]
+    }
+  ],
+  "condition_capability": null,
+  "acknowledgement_output": null,
+  "recipe_digest": "0732c5b0a429436ab4cb9655994c041f3c7642ceb4b3b89493c1487fa05b5c00"
+}

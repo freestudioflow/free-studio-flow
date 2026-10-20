@@ -31,8 +31,9 @@ The tree does **not** contain:
 
 Live artifacts belong under `output/` (gitignored). Tests build temporary DOCX in pytest
 `tmp_path`. Kaggle credentials stay in `KAGGLE_CONFIG_DIR` or `~/.kaggle`.
-Vendor API and extra local/API tokens stay in environment variables;
-`fsf-executors.json` is gitignored and must list env **names** only.
+Vendor API and extra local/API tokens stay in process environment variables or
+an explicitly configured host credential facility. Bindings store references,
+not secret values. `fsf-executors.json` is gitignored and must list env **names** only.
 
 GitHub destination: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow).
 Contact: [https://prodocux.com/#contact](https://prodocux.com/#contact).

@@ -483,7 +483,7 @@ class SafeFfprobeRunner:
             (
                 "format=format_name,duration,size,bit_rate:"
                 "stream=index,codec_type,codec_name,profile,width,height,"
-                "pix_fmt,r_frame_rate,avg_frame_rate,channels,sample_rate,bit_rate"
+                "pix_fmt,r_frame_rate,avg_frame_rate,channels,sample_rate,bit_rate,nb_frames,duration"
             ),
             "-of",
             "json",
