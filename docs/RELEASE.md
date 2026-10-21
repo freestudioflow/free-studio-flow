@@ -5,17 +5,16 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc6`**, available on PyPI.
+The current published pre-release is **`0.1.0rc7`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
-## Release notes (0.1.0rc7 — release candidate)
+## Release notes (0.1.0rc7)
 
-Source version `0.1.0rc7` is a release candidate and has not yet been tagged or
-published. These additions are not part of the published rc6 distributions:
+Version `0.1.0rc7` is available on PyPI and GitHub Releases:
 
 - Locate and edit clips by stable IDs and revision-bound patches, with explicit
   subtitle timing and independent post-production plans for verified sources.
@@ -95,11 +94,10 @@ PyPI versions are immutable: do not rebuild or re-upload an already-published
 version.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc6"
+python -m pip install "free-studio-flow==0.1.0rc7"
 ```
 
-The command above installs the published rc6 release. To use unreleased
-changes, install from the checkout:
+The command above installs rc7. To develop against a checkout:
 
 ```powershell
 python -m venv .venv
@@ -140,7 +138,7 @@ them private and exclude them from release attachments.
 .\.venv\Scripts\python.exe -m twine check dist\*
 ```
 
-Release candidate distribution filenames for `0.1.0rc7` (not yet published):
+Published distribution filenames for `0.1.0rc7`:
 
 - `dist/free_studio_flow-0.1.0rc7-py3-none-any.whl`
 - `dist/free_studio_flow-0.1.0rc7.tar.gz`

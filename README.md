@@ -10,18 +10,17 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc7`**.
-This is a release candidate and has not yet been published.
 
-Latest verified PyPI release: **[`0.1.0rc6`](https://pypi.org/project/free-studio-flow/0.1.0rc6/)**.
-The published distributions remain available on PyPI.
+Latest verified PyPI release: **[`0.1.0rc7`](https://pypi.org/project/free-studio-flow/0.1.0rc7/)**,
+published from tag **[`v0.1.0rc7`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc7)**
+at commit `aafe4328a5a30030c8178c0e16aa637c26e573e6`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc6"
+python -m pip install "free-studio-flow==0.1.0rc7"
 ```
 <!-- pypi-release-status:end -->
 
-The rc7 features below describe this release candidate, not the published rc6
-package. Install the checkout to use them until rc7 is published.
+The rc7 features below are included in the published rc7 package.
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
 
@@ -32,7 +31,7 @@ profiles for text, image, video, audio and upscale outputs. Copy the disabled
 templates with `fsf remote templates --out config` into an existing empty
 directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
 for setup, recovery, provider protocol limits and recipe customization.
-These source additions are not included in the published rc6 distributions.
+These workflows are included in the rc7 distributions.
 Remote outputs retain parent-side QC and review requirements; successful transport
 does not establish real model inference or visual consistency.
 
@@ -56,7 +55,7 @@ Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter
 - **Blender and assets** *(rc7)*: Trusted small-scene rendering, static
   references, clay motion controls, external control-video import and immutable
   asset registration with fixed-version lookup.
-- **Unreleased remote and API workflows**: Parent/worker recipes, typed model
+- **Remote and API workflows** *(rc7)*: Parent/worker recipes, typed model
   profiles, host credential bindings and bounded per-shot QC recovery.
 
 ## Install
