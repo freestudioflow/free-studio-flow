@@ -31,6 +31,9 @@ dependencies = [
 api = ["boto3>=1.35,<2"]
 credentials = ["keyring>=25,<26"]
 dev = [
+  "build>=1.2,<2",
+  "setuptools>=77",
+  "wheel>=0.45",
   "boto3>=1.35,<2",
   "pytest==8.3.4",
   "static-ffmpeg>=2.7",

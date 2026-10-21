@@ -218,7 +218,9 @@ def test_remote_plan_executor_qc_and_three_resume_cycles(remote_case):
     from fsf.runtime.plan_executor import PlanExecutor
     ensure_media_tools_on_path()
     root,recipe,profile,definition,wheel=remote_case
-    recipe=seal(template("ffmpeg.recipe.json"),"recipe_digest")
+    recipe=template("ffmpeg.recipe.json")
+    recipe["environment"]["python"]=".".join(map(str,sys.version_info[:2]))
+    recipe=seal(recipe,"recipe_digest")
     profile["approved_recipes"]=[recipe["recipe_digest"]]
     write_json(root/"profile.json",profile);write_json(root/"recipe.json",recipe)
     backend=RemoteExecutor(executor_id="local.remote.video",tool_name="studio.video.generate",profile=root/"profile.json",
