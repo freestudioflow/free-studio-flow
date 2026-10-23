@@ -1,5 +1,6 @@
 """Sealed Kaggle boolean/machine-shape policy without provider requests."""
 import copy
+import importlib.metadata
 import json
 from types import SimpleNamespace
 import sys
@@ -9,6 +10,25 @@ from fsf.remote.contracts import seal,RemoteError
 from fsf.remote.v2 import prepare_request
 from fsf.remote.v2_dispatch import submit
 from test_remote_v2 import case,remote_wheel
+
+
+@pytest.fixture
+def gateway_sdk(monkeypatch):
+    """Model the pinned gateway SDK independently of the host installation."""
+    installed_version = importlib.metadata.version
+    monkeypatch.setattr(importlib.metadata, 'version',
+        lambda name: '2.2.4' if name == 'kaggle' else installed_version(name))
+
+
+@pytest.mark.parametrize('version', ['1.6.17', '2.2.5'])
+def test_gateway_rejects_unverified_sdk_before_authentication(monkeypatch, version):
+    from fsf.remote.kaggle_v2_api import call
+    monkeypatch.setattr(importlib.metadata, 'version', lambda name: version)
+    class Never:
+        def __init__(self):pytest.fail('unverified SDK must not authenticate')
+    monkeypatch.setitem(sys.modules, 'kaggle.api.kaggle_api_extended', SimpleNamespace(KaggleApi=Never))
+    with pytest.raises(RemoteError, match='^REMOTE_KAGGLE_SDK_VERSION$'):
+        call({'operation': 'prepare'})
 
 
 def kaggle_request(case,monkeypatch,gpu):
@@ -26,7 +46,7 @@ def kaggle_request(case,monkeypatch,gpu):
 
 
 @pytest.mark.parametrize('gpu',[False,True])
-def test_actual_gateway_validates_boolean_and_machine_shape_before_sdk(case,monkeypatch,gpu):
+def test_actual_gateway_validates_boolean_and_machine_shape_before_sdk(case,monkeypatch,gpu,gateway_sdk):
     root,_,_,_,_=case
     profile,request=kaggle_request(case,monkeypatch,gpu)
     calls=[]
@@ -86,7 +106,7 @@ def test_fixed_worker_notebook_cannot_target_unrelated_notebook(case,monkeypatch
     assert metadata(request,profile,'synthetic-owner')['id']=='synthetic-owner/fsf-worker-rc8'
 
 
-def test_fixed_notebook_status_uses_pinned_version_and_source(case,monkeypatch):
+def test_fixed_notebook_status_uses_pinned_version_and_source(case,monkeypatch,gateway_sdk):
     from fsf.remote import kaggle_v2_api as gateway
     from fsf.remote.v2_transports import notebook
     root,*_=case
@@ -169,7 +189,7 @@ def test_secret_failure_does_not_claim_missing_grant_or_retry_unknown_error():
     assert failure_report(KeyboardInterrupt(),'host_secret_config')['code']=='REMOTE_CANCELLED'
 
 
-def test_browser_activation_never_calls_push_and_requires_new_exact_version(case,monkeypatch):
+def test_browser_activation_never_calls_push_and_requires_new_exact_version(case,monkeypatch,gateway_sdk):
     from fsf.remote import kaggle_v2_api as gateway
     from fsf.remote.v2_transports import notebook
     root,*_=case
