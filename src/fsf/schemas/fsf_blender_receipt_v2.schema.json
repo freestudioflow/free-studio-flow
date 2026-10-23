@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_blender_receipt_v2"
+    },
+    "identity": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution": {
+      "const": "completed"
+    },
+    "motion_review": {
+      "const": "not_reviewed"
+    },
+    "receipt_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "identity",
+    "manifest_digest",
+    "execution",
+    "motion_review",
+    "receipt_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

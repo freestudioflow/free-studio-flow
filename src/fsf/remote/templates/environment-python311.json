@@ -1,0 +1,7 @@
+{
+  "schema_version": "fsf_environment_plan_v1",
+  "python": "3.11",
+  "deadline_seconds": 30,
+  "tools": [],
+  "environment_digest": "3b31e9a62083c14d13c0f6c5996623ea518610f7120c55819a3e9f424bd87154"
+}

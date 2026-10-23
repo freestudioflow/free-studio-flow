@@ -5,6 +5,29 @@ from pathlib import Path
 import sys
 
 
+def configure_device(scene, preferences, render, selection=None):
+    """Pin the declared CUDA devices. One card stays one visible device."""
+    scene.render.engine='CYCLES'
+    if render['device']=='cpu':
+        scene.cycles.device='CPU'
+        return {'engine':'CYCLES','device':'CPU','backend':'none','devices':[],'selection':None}
+    count=render['device_count']
+    chosen=selection if isinstance(selection,list) else ([selection] if selection else [])
+    if (render['backend']!='cuda' or not 1<=count<=16 or len(chosen)!=count
+            or any(item.get('memory_mb',0)<render['min_vram_mb'] for item in chosen)):
+        raise ValueError('GPU device requirement mismatch')
+    preferences.compute_device_type='CUDA'
+    preferences.get_devices()
+    devices=[d for d in preferences.devices if d.type=='CUDA']
+    if len(devices)!=count:
+        raise ValueError('Visible CUDA devices must equal the declared count')
+    for device in preferences.devices:device.use=device in devices
+    scene.cycles.device='GPU'
+    reported=selection if count==1 and not isinstance(selection,list) else chosen
+    return {'engine':'CYCLES','device':'GPU','backend':'cuda','device_count':count,
+            'devices':[{'name':d.name,'id':d.id,'type':d.type} for d in devices],'selection':reported}
+
+
 def main():
     import bpy
     from bpy_extras.object_utils import world_to_camera_view
@@ -61,10 +84,11 @@ def main():
                 obj.data.materials.clear()
                 obj.data.materials.append(clay)
     # CPU Cycles and explicit settings avoid version-dependent viewport engines.
-    scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
-    scene.cycles.samples = 4
-    scene.cycles.seed = 0
+    render=request.get('render',{'device':'cpu','backend':'none','device_count':0,'min_vram_mb':0,'samples':4,'seed':0})
+    preferences=bpy.context.preferences.addons['cycles'].preferences
+    evidence=configure_device(scene,preferences,render,request.get('_gpu_selection'))
+    scene.cycles.samples = render['samples']
+    scene.cycles.seed = render['seed']
     scene.cycles.use_animated_seed = False
     scene.cycles.use_denoising = False
     scene.render.threads_mode = "FIXED"
@@ -110,7 +134,12 @@ def main():
             frames.append({"view_id": view["view_id"], "scene_frame": frame,
                            "frame": frame-request["start_frame"], "path": name, "projection": projection})
     bpy.ops.export_scene.gltf(filepath=str(out / "model.glb"), export_format="GLB")
-    (out / "worker.json").write_text(json.dumps({"blender_version": bpy.app.version_string, "frames": frames}, allow_nan=False), "utf-8")
+    result={"blender_version": bpy.app.version_string, "frames": frames}
+    if request['schema_version']=='fsf_blender_request_v2':
+        if scene.render.engine!='CYCLES' or scene.cycles.device!=evidence['device']:
+            raise ValueError('Render device changed')
+        result['execution_evidence']=evidence
+    (out / "worker.json").write_text(json.dumps(result, allow_nan=False), "utf-8")
 
 
 if __name__ == "__main__":

@@ -46,10 +46,13 @@ def _download(url, target):
 
 
 def call(value):
+    directory = Path(value["directory"])
+    if value.get("operation") == "submit":
+        from fsf.remote.dispatch_hold import refuse_held_submit
+        refuse_held_submit(directory)
     from kaggle.api.kaggle_api_extended import KaggleApi
     api = KaggleApi()
     api.authenticate()
-    directory = Path(value["directory"])
     settings = value["settings"]
     owner = os.environ.get(settings.get("owner_env", "KAGGLE_USERNAME")) or api.config_values.get("username")
     if not owner or not re.fullmatch(r"[A-Za-z0-9_-]+", owner):

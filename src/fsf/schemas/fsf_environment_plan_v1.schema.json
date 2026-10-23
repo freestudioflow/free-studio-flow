@@ -1,0 +1,146 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_environment_plan_v1"
+    },
+    "python": {
+      "type": "string",
+      "pattern": "^3\\.(11|12|13)(\\.[0-9]+)?$"
+    },
+    "deadline_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1800
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "mode": {
+            "enum": [
+              "preinstalled",
+              "archive"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "os": {
+            "enum": [
+              "linux",
+              "windows"
+            ]
+          },
+          "architecture": {
+            "enum": [
+              "x86_64",
+              "amd64",
+              "aarch64",
+              "arm64"
+            ]
+          },
+          "archive_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "archive_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "archive_size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10737418240
+          },
+          "expanded_limit_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 21474836480
+          },
+          "executable": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "version_args": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "minItems": 1,
+            "maxItems": 16
+          },
+          "version_pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "smoke_args": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "tool_id",
+          "mode",
+          "version",
+          "os",
+          "architecture",
+          "archive_path",
+          "archive_sha256",
+          "archive_size_bytes",
+          "expanded_limit_bytes",
+          "executable",
+          "version_args",
+          "version_pattern",
+          "smoke_args"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 16
+    },
+    "environment_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "python",
+    "deadline_seconds",
+    "tools",
+    "environment_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

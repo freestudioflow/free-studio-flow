@@ -11,7 +11,12 @@ Offline shape tests are not FSF-S complete. At minimum:
 
 Entry: [`AGENTS.md`](../AGENTS.md) and `.venv/Scripts/python scripts/agent_verify.py` (Unix: `.venv/bin/python`).
 
-Kaggle credentials: `KAGGLE_CONFIG_DIR` or `~/.kaggle/kaggle.json`. The live gate runs `kaggle kernels list --mine --page-size 1` and does **not** default to `kernels push`.
+Kaggle credentials: `KAGGLE_API_TOKEN`, `~/.kaggle/access_token` (or
+`access_token.txt`), legacy `KAGGLE_USERNAME` + `KAGGLE_KEY`, or
+`KAGGLE_CONFIG_DIR` / `~/.kaggle/kaggle.json`. Legacy credentials remain
+supported. Configuration presence is reported separately from authentication;
+the live gate runs `kaggle kernels list --mine --page-size 1` and does **not**
+default to `kernels push`. Credential reports omit account names and directories.
 
 ## How to add tokens
 
@@ -23,7 +28,7 @@ JSON / git / manifests / `AGENTS.local.md` **never store secrets**. FSF reads pr
 |---|---|---|
 | Vendor / cloud API | `FSF_VENDOR_API_BASE` + `FSF_VENDOR_API_KEY` | `live-check` pings the vendor (Bearer) only when set. PyPI must still pass |
 | Local Comfy / GPU | `COMFYUI_AVAILABLE=1` | Set only when the local backend is actually up. Local transport shape does not depend on this variable |
-| Kaggle | `KAGGLE_CONFIG_DIR` or `~/.kaggle/kaggle.json` | Do not put this in extras JSON |
+| Kaggle | `KAGGLE_API_TOKEN`, token file, or legacy config | Do not put credential values in extras JSON |
 | Hugging Face (local downloads) | `HF_TOKEN` | OS environment only; do not write it into JSON |
 
 For Windows, open **Edit environment variables for your account**, add the
@@ -46,6 +51,23 @@ export COMFYUI_AVAILABLE=1
 ```
 
 ### Adding more backends
+
+#### Kaggle host credential binding
+
+For a host Secret Manager or OS credential store, set
+`FSF_KAGGLE_CREDENTIAL_BINDING_FILE` to a private binding file using the
+existing `fsf_credential_binding_v1` format. Its `profile_id` must be `kaggle`.
+Supported sources are `environment`, `os_credential_store`, and
+`host_secret_manager`; authorization must be explicit. The binding contains
+only a secret reference, revision and approved resolver command, never a token.
+See the credential binding format in the provider setup section below.
+
+FSF resolves the token for one child call. It does not modify the parent
+environment or fall back to another account's legacy/OAuth files when an
+explicit binding is used. Resolver errors and expired bindings fail closed.
+Inspecting configuration does not invoke the resolver or prove authentication.
+
+#### Executor configuration
 
 1. Copy [`fsf-executors.example.json`](../fsf-executors.example.json) to gitignored `fsf-executors.json` (or set `FSF_EXECUTORS_FILE` / `FSF_EXTRA_EXECUTORS`).
 2. JSON stores env **names** only (`key_env`, `endpoint_env`, `require_env`). Fields named `api_key` / `token` are refused.

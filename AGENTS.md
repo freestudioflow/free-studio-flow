@@ -1,4 +1,4 @@
-# Agent verification gate (Cursor / Codex / Antigravity)
+# Agent verification gate (Codex / Cursor / Antigravity / Muse)
 
 Read this file before changing the tree. Before pushing the FSF core, FSF-S must pass **actual-work verification**: Kaggle work, API, and **local transport shape**. When this machine has no useful local model, **skip live local inference**, but the local capability must exist; do not treat it as unimplemented.
 
@@ -52,7 +52,7 @@ Python: the interpreter for this checkout. Create it with `python -m venv .venv`
 .venv/Scripts/python scripts/agent_verify.py
 ```
 
-Codex / Antigravity use the same prompt: `scripts/agent_verify_prompt.txt`. Do not invent a second test plan.
+Codex / Cursor / Antigravity / Muse use the same prompt: `scripts/agent_verify_prompt.txt`. Do not invent a second test plan.
 
 Equivalent split:
 
@@ -69,7 +69,7 @@ Equivalent split:
 | `pytest -m "not live"` | M1–M4 spine, fourteen skill **shapes** (including local), plural extras, CLI refusal of fake success, private Kaggle job envelope | Real network, real GPU |
 | `pytest -m live` and `.venv/Scripts/python -m fsf.cli live-check` | Kaggle API `kernels list --mine`, private job envelope, PyPI rc7 / a8 / a3, local transport shape | Real Comfy HTTP / real local GPU inference |
 
-A failure means FSF-S is not verified. Missing `kaggle.json` or unreachable Kaggle / PyPI must **fail the live gate**; do not skip and pretend pass.
+A failure means FSF-S is not verified. Missing usable Kaggle authentication or unreachable Kaggle / PyPI must **fail the live gate**; do not skip and pretend pass. A usable token or authorized host credential binding does not require `kaggle.json`.
 
 ## Environment
 

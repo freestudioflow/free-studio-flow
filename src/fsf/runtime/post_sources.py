@@ -34,9 +34,13 @@ def file_sha(path):
             h.update(chunk)
             remaining -= len(chunk)
             if remaining < 0:
+                from fsf.runtime.private_diagnostics import source_changed
+                source_changed('file_grew',path,before,os.fstat(stream.fileno()))
                 raise PostError("POST_SOURCE_CHANGED")
         after = os.fstat(stream.fileno())
         if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            from fsf.runtime.private_diagnostics import source_changed
+            source_changed('file_stat_changed',path,before,after)
             raise PostError("POST_SOURCE_CHANGED")
     return h.hexdigest()
 

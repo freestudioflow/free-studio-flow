@@ -27,12 +27,9 @@ class KaggleLtx23Executor(BaseVideoExecutor):
         return "Kaggle T4×2 (LTX-Video-2.3 Q3)"
 
     def is_available(self) -> bool:
-        """Check if Kaggle credentials file exists."""
-        kaggle_dir = os.environ.get("KAGGLE_CONFIG_DIR")
-        if kaggle_dir:
-            return (Path(kaggle_dir) / "kaggle.json").is_file()
-        user_kaggle = Path.home() / ".kaggle" / "kaggle.json"
-        return user_kaggle.is_file()
+        """Check configuration, separately from verified authentication."""
+        from fsf.live.credentials import inspect_kaggle_credentials
+        return inspect_kaggle_credentials()["configured"]
 
     def build_notebook_job(self, tasks: list[dict[str, Any]], out_dir: Path) -> Path:
         """Build private Kaggle notebook script for submission."""

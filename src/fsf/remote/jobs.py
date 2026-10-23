@@ -24,6 +24,11 @@ def main(argv=None):
     blender.add_argument("--input", required=True)
     blender.add_argument("--out", required=True)
     blender.add_argument("--trusted-scene", action="store_true")
+    blender.add_argument("--executable", help="Pinned installed Blender supplied by the approved recipe")
+    blender.add_argument('--ffmpeg')
+    blender.add_argument('--ffprobe')
+    blender.add_argument('--start-frame', type=int)
+    blender.add_argument('--end-frame', type=int)
     args = parser.parse_args(argv)
     if args.job == "cpu":
         write_json(args.out, {"operation": "integer_square", "input": args.value, "square": args.value*args.value})
@@ -46,11 +51,18 @@ def main(argv=None):
             source = root/"source";source.mkdir()
             unpack(args.input,source)
             request = read_json(source/"request.json")
+            if args.start_frame is not None or args.end_frame is not None:
+                if args.start_frame is None or args.end_frame is None or not request['start_frame'] <= args.start_frame < args.end_frame <= request['end_frame']:
+                    raise ValueError('Invalid segment interval')
+                request['animation_range'] = request.get('animation_range', {'start_frame': request['start_frame'], 'end_frame': request['end_frame']})
+                request.update(start_frame=args.start_frame, end_frame=args.end_frame)
             output = root/"renders";output.mkdir()
             import shutil as tools
-            executable = tools.which("blender")
+            executable = str(Path(args.executable).absolute()) if args.executable else tools.which("blender")
+            if bool(args.ffmpeg)!=bool(args.ffprobe):raise ValueError('Both media tools must be supplied')
             result = execute_blender_plan(compile_blender_plan(request),source_root=source,output_root=output,
-                                        executable=executable,trusted_scene=args.trusted_scene)
+                                        executable=executable,trusted_scene=args.trusted_scene,
+                                        media_tools=tuple(str(Path(p).absolute()) for p in (args.ffmpeg,args.ffprobe)) if args.ffmpeg else None)
             bundle = output/result["bundle"]
             manifest = verify_bundle(bundle)
             pack(bundle,["manifest.json","receipt.json",*(a["path"] for a in manifest["artifacts"])],args.out)

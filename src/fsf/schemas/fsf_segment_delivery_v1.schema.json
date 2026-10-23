@@ -1,0 +1,331 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_segment_delivery_v1"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generation_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "encoder_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "encoder_profile": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "const": "rc8_control_x264_v1"
+        },
+        "device": {
+          "const": "cpu"
+        },
+        "encoder": {
+          "const": "libx264"
+        },
+        "ffmpeg_version": {
+          "const": "8.0.1"
+        },
+        "ffmpeg_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "ffmpeg_build_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "libx264_build": {
+          "type": "string",
+          "pattern": "^core [0-9]+(?: r[0-9]+ [0-9a-f]{7,40})?$",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "profile",
+        "device",
+        "encoder",
+        "ffmpeg_version",
+        "ffmpeg_sha256",
+        "ffmpeg_build_digest",
+        "libx264_build"
+      ],
+      "additionalProperties": false
+    },
+    "control_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "revision": {
+      "const": 1
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "const": "control.mp4"
+        },
+        "role": {
+          "const": "control_video"
+        },
+        "media_type": {
+          "const": "video/mp4"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        }
+      },
+      "required": [
+        "path",
+        "role",
+        "media_type",
+        "sha256",
+        "size_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "start_frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "end_frame": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 512
+    },
+    "complete_digests": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "minItems": 1,
+      "maxItems": 128
+    },
+    "frame_sequence_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "frame_mapping_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "frame_sequence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scene_frame": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "scene_frame",
+          "sha256"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "minItems": 1,
+      "maxItems": 96
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 96
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "additionalProperties": false,
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "object",
+          "properties": {
+            "num": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24000
+            },
+            "den": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1001
+            }
+          },
+          "required": [
+            "num",
+            "den"
+          ],
+          "additionalProperties": false
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 96
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 512
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 512
+        },
+        "frame_mapping": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 96,
+          "items": {
+            "type": "object",
+            "properties": {
+              "input_frame": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 95
+              },
+              "output_frame": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 95
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "num": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "den": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "num",
+                  "den"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "input_frame",
+              "output_frame",
+              "time"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "decoded_rgb_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "clock",
+        "frame_count",
+        "width",
+        "height",
+        "frame_mapping",
+        "decoded_rgb_sha256"
+      ],
+      "additionalProperties": false,
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "ssim": {
+      "type": "number",
+      "minimum": 0.98,
+      "maximum": 1
+    },
+    "motion_review": {
+      "const": "not_reviewed"
+    },
+    "listening_review": {
+      "const": "not_reviewed"
+    },
+    "delivery_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "plan_digest",
+    "generation_digest",
+    "encoder_digest",
+    "encoder_profile",
+    "control_id",
+    "revision",
+    "artifact",
+    "start_frame",
+    "end_frame",
+    "width",
+    "height",
+    "complete_digests",
+    "frame_sequence_digest",
+    "frame_mapping_digest",
+    "frame_sequence",
+    "frame_count",
+    "clock",
+    "artifact_sha256",
+    "size_bytes",
+    "quality",
+    "ssim",
+    "motion_review",
+    "listening_review",
+    "delivery_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

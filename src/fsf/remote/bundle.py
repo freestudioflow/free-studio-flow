@@ -108,6 +108,8 @@ def prepare_bundle(definition, recipe, *, inputs_root, wheel, profile, output_ro
     """Create an immutable dispatch request from approved local declarations."""
     recipe = validate_recipe(recipe)
     profile = validate_profile(profile)
+    from fsf.remote.preflight import validate_definition
+    validate_definition(definition, recipe)
     if not isinstance(definition, dict) or set(definition) != {"parent", "parameters", "inputs", "video_condition", "consistency_requirements", "expected_media_contract"}:
         raise RemoteError("REMOTE_DEFINITION")
     root = _root(output_root)

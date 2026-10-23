@@ -181,6 +181,8 @@ class SshAdapter(Adapter):
         self._ssh([self.settings["python"], "-c", "import sys;print(sys.version_info.major)"])
 
     def submit(self, request, bundle, directory):
+        from fsf.remote.dispatch_hold import refuse_held_submit
+        refuse_held_submit(directory)
         remote = self._dir(request)
         # Atomic remote claim: reconnect never repeats the spawn operation.
         self._ssh([self.settings["python"], "-c", "import os,sys;os.makedirs(sys.argv[1],exist_ok=True);os.mkdir(sys.argv[2])",
@@ -219,8 +221,10 @@ class KaggleAdapter(Adapter):
         data = {"operation": operation, "request_digest": request["request_digest"], "directory": str(directory),
                 "settings": self.settings, "deadline_seconds": request["policy"]["deadline_seconds"]}
         write_json(directory/"provider-call.json", data)
-        result = run_safe_subprocess([sys.executable, "-m", "fsf.remote.kaggle_api", str(directory/"provider-call.json")],
-                                    timeout_seconds=120, output_limit_bytes=65536)
+        from fsf.live.credentials import kaggle_credential_environment
+        with kaggle_credential_environment() as env:
+            result = run_safe_subprocess([sys.executable, "-m", "fsf.remote.kaggle_api", str(directory/"provider-call.json")],
+                                        env=env, inherit_env=False, timeout_seconds=120, output_limit_bytes=65536)
         if result.timed_out or result.returncode:
             raise RemoteError("REMOTE_KAGGLE_API_FAILED")
         value = read_json(directory/"provider-response.json")

@@ -261,3 +261,20 @@ def test_hygiene_does_not_flag_url_home_segments(tmp_path: Path) -> None:
     sample = tmp_path / "sample.py"
     sample.write_text('url = "https://example.com/' + 'Users/alice/project"', encoding="utf-8")
     assert hygiene.inspect_entry("src/sample.py", sample) == []
+
+
+def test_hygiene_includes_untracked_sources_and_excludes_operator_ignored_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hygiene = _hygiene()
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    (tmp_path / "README.md").write_text("Public instructions.\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("operator-private/\n", encoding="utf-8")
+    monkeypatch.setattr(hygiene, "PUBLIC_FILES", {"README.md", ".gitignore"})
+    assert hygiene.scan_public_tree(tmp_path) == []
+    private = tmp_path / "operator-private"
+    private.mkdir()
+    (private / "token.txt").write_text("ghp_" + "a" * 30, encoding="utf-8")
+    assert hygiene.scan_public_tree(tmp_path) == []
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "unsafe.py").write_text('token = "ghp_' + "a" * 30 + '"', encoding="utf-8")
+    assert any("src/unsafe.py" in hit and "secret-like" in hit for hit in hygiene.scan_public_tree(tmp_path))

@@ -55,6 +55,9 @@ def build_edit_parser():
     patch = commands.add_parser("patch", help="Compare and atomically publish a metadata patch")
     patch.add_argument("edit")
     patch.add_argument("--patch", required=True, action=_Once)
+    impact=commands.add_parser('patch-impact',help='Read-only potential cue/anchor impact; never apply or confirm')
+    impact.add_argument('edit')
+    impact.add_argument('--patch',required=True,action=_Once)
     inspect = commands.add_parser("inspect", help="Show clip, track and cue identities")
     inspect.add_argument("edit")
     diff = commands.add_parser("diff", help="Compare two revisions of one edit")
@@ -106,7 +109,10 @@ def main(argv=None):
         return audio_main(argv[1:])
     try:
         args = build_edit_parser().parse_args(argv)
-        if args.operation == "locate":
+        if args.operation=='patch-impact':
+            from fsf.core.edit_diagnostics import patch_impact
+            result=patch_impact(read_edit(args.edit),read_json(args.patch))
+        elif args.operation == "locate":
             if (args.revision < 1 or not re.fullmatch(r"[0-9a-f]{64}", args.digest)
                     or args.position is not None and args.position < 1
                     or args.label is not None and not args.label.strip()

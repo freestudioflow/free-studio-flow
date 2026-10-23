@@ -1,0 +1,462 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_remote_recipe_v2"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "string",
+              "integer",
+              "number",
+              "boolean"
+            ]
+          },
+          "default": {},
+          "minimum": {
+            "type": "number"
+          },
+          "maximum": {
+            "type": "number"
+          },
+          "enum": {
+            "type": "array",
+            "items": {},
+            "minItems": 1,
+            "maxItems": 64
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "role": {
+            "enum": [
+              "video",
+              "audio",
+              "control_video",
+              "model",
+              "reference_image",
+              "data"
+            ]
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "artifact_id",
+          "role",
+          "media_type"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 64
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "enum": [
+            "linux",
+            "windows",
+            "any"
+          ]
+        },
+        "python": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "probes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "program": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "minItems": 0,
+                "maxItems": 64
+              },
+              "pattern": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "program",
+              "args",
+              "pattern"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "setup": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "minItems": 1,
+                "maxItems": 256
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "args",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "model_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "model_id",
+              "revision",
+              "sha256",
+              "license",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "credential_env_names": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          }
+        }
+      },
+      "required": [
+        "os",
+        "python",
+        "probes",
+        "setup",
+        "models",
+        "credential_env_names"
+      ],
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+            },
+            "minItems": 0,
+            "maxItems": 64
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "minItems": 1,
+            "maxItems": 256
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "artifact_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "role": {
+                  "enum": [
+                    "video",
+                    "audio",
+                    "control_video",
+                    "model",
+                    "reference_image",
+                    "data"
+                  ]
+                },
+                "media_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "artifact_id",
+                "path",
+                "role",
+                "media_type"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "step_id",
+          "tool",
+          "depends_on",
+          "args",
+          "outputs"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 32
+    },
+    "condition_capability": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recipe_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "acknowledgement_output": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "execution_requirements": {
+      "type": "object",
+      "properties": {
+        "render": {
+          "type": "object",
+          "properties": {
+            "engine": {
+              "const": "CYCLES"
+            },
+            "device": {
+              "enum": [
+                "cpu",
+                "gpu"
+              ]
+            },
+            "backend": {
+              "enum": [
+                "none",
+                "cuda"
+              ]
+            },
+            "device_count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "min_vram_mb": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 131072
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "threads": {
+              "const": 2
+            }
+          },
+          "required": [
+            "engine",
+            "device",
+            "backend",
+            "device_count",
+            "min_vram_mb",
+            "samples",
+            "seed",
+            "threads"
+          ],
+          "additionalProperties": false
+        },
+        "encode": {
+          "type": "object",
+          "properties": {
+            "profile": {
+              "const": "rc8_control_x264_v1"
+            },
+            "device": {
+              "const": "cpu"
+            },
+            "encoder": {
+              "const": "libx264"
+            },
+            "ffmpeg_version": {
+              "const": "8.0.1"
+            },
+            "ffmpeg_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "ffmpeg_build_digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "libx264_build": {
+              "type": "string",
+              "pattern": "^core [0-9]+(?: r[0-9]+ [0-9a-f]{7,40})?$",
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "profile",
+            "device",
+            "encoder",
+            "ffmpeg_version",
+            "ffmpeg_sha256",
+            "ffmpeg_build_digest",
+            "libx264_build"
+          ],
+          "additionalProperties": false
+        },
+        "schedule_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "render",
+        "encode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "recipe_id",
+    "version",
+    "parameters",
+    "inputs",
+    "environment",
+    "steps",
+    "condition_capability",
+    "recipe_digest",
+    "acknowledgement_output",
+    "execution_requirements"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

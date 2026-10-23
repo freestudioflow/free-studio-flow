@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_kaggle_native_store_v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "store_id", "authorized", "root", "read_prefixes", "write_prefixes", "max_artifact_bytes", "max_total_bytes", "deadline_seconds", "max_inline_notebook_bytes"],
+  "properties": {
+    "schema_version": {"const": "fsf_kaggle_native_store_v1"},
+    "store_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "authorized": {"type": "boolean"},
+    "root": {"type": "string", "minLength": 1},
+    "read_prefixes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 2}},
+    "write_prefixes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 2}},
+    "max_artifact_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+    "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+    "deadline_seconds": {"type": "integer", "minimum": 1, "maximum": 900},
+    "max_inline_notebook_bytes": {"type": "integer", "minimum": 1024, "maximum": 1048576}
+  }
+}

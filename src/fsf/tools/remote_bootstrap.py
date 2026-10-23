@@ -74,11 +74,28 @@ def main():
         for name in request["recipe"]["environment"]["credential_env_names"]:
             if name in request["policy"]["credential_env_names"] and name in os.environ:
                 env[name] = os.environ[name]
+        # Standalone bootstrap runs before the package is installed. Keep this
+        # closed map aligned with fsf.remote.environment.INSTALL_NETWORK.
+        install_network = {"FSF_REMOTE_INSTALL_HTTP_PROXY":"HTTP_PROXY",
+            "FSF_REMOTE_INSTALL_HTTPS_PROXY":"HTTPS_PROXY",
+            "FSF_REMOTE_INSTALL_NO_PROXY":"NO_PROXY", "FSF_REMOTE_INSTALL_CA":"SSL_CERT_FILE"}
+        for name in install_network:
+            env.pop(name, None)
         def run(command):
             remaining = deadline-time.monotonic()
             if remaining <= 0:
                 raise TimeoutError()
-            result = safety.run_safe_subprocess(command, timeout_seconds=remaining, env=env,
+            effective_env = dict(env)
+            if phase == "install":
+                for name, target in install_network.items():
+                    if name in os.environ:
+                        if name not in request["policy"]["credential_env_names"]:
+                            raise ValueError()
+                        value = os.environ[name]
+                        if not value or any(c in value for c in "\r\n\0"):
+                            raise ValueError()
+                        effective_env[target] = value
+            result = safety.run_safe_subprocess(command, timeout_seconds=remaining, env=effective_env,
                 inherit_env=False, cwd=root, output_limit_bytes=1024*1024,
                 cancel_check=lambda:(root/(key+".cancel")).exists())
             if result.timed_out or result.returncode:

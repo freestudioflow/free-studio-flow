@@ -21,8 +21,8 @@ def fetch_pypi_version(package: str, *, timeout_seconds: int = 30) -> dict[str, 
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as exc:
-        return {"ok": False, "package": package, "error": str(exc)}
+    except urllib.error.URLError:
+        return {"ok": False, "package": package, "error": "PyPI API unavailable"}
     except TimeoutError:
         return {"ok": False, "package": package, "error": "timeout"}
     version = body.get("info", {}).get("version")
@@ -66,8 +66,8 @@ def ping_vendor_api(*, timeout_seconds: int = 30) -> dict[str, Any]:
             return {"ok": 200 <= int(status) < 300, "configured": True, "http_status": int(status)}
     except urllib.error.HTTPError as exc:
         return {"ok": False, "configured": True, "http_status": exc.code, "error": f"HTTP {exc.code}"}
-    except urllib.error.URLError as exc:
-        return {"ok": False, "configured": True, "error": str(exc)}
+    except urllib.error.URLError:
+        return {"ok": False, "configured": True, "error": "Vendor API unavailable"}
 
 
 def verify_apis() -> dict[str, Any]:

@@ -13,4 +13,5 @@ def test_private_kaggle_job_envelope(sample_docx: Path, tmp_path: Path) -> None:
     assert result["task_count"] == 3
     assert result["executor_id"] == "kaggle.ltx23.t2v"
     assert not result["secrets_leaked"]
-    assert Path(result["job_file"]).is_file()
+    assert result["job_file"] == "kaggle_job.json"
+    assert (tmp_path / "job" / result["job_file"]).is_file()

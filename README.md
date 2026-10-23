@@ -9,7 +9,7 @@ AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocu
 License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
-Source version in this branch: **`0.1.0rc7`**.
+Source version in this branch: **`0.1.0rc8`**.
 
 Latest verified PyPI release: **[`0.1.0rc7`](https://pypi.org/project/free-studio-flow/0.1.0rc7/)**,
 published from tag **[`v0.1.0rc7`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc7)**
@@ -20,7 +20,8 @@ python -m pip install "free-studio-flow==0.1.0rc7"
 ```
 <!-- pypi-release-status:end -->
 
-The rc7 features below are included in the published rc7 package.
+Features marked rc7 are included in the published rc7 package. Source additions
+are versioned separately below.
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
 
@@ -36,6 +37,27 @@ Remote outputs retain parent-side QC and review requirements; successful transpo
 does not establish real model inference or visual consistency.
 
 Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter-media==0.2.0a3`.
+
+### GPU workers and control sources (rc8)
+
+Pinned tool preparation, provider-native artifact transfer, explicit v2 CUDA requests
+and global Blender segments are described in
+[Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions require a
+matching source-built parent and worker; the published rc7 package uses the v1
+path. GPU execution still requires operator resource approval and verified host
+capability. Technical control-video checks leave motion review `not_reviewed`.
+
+Approved worker recipes can fill free GPU slots as tasks finish, bind selected
+CUDA devices, and explicitly share cards within declared slot and memory
+budgets. Pause drains running tasks; continuation rechecks accepted outputs.
+Native archives remain bounded to 64 MiB, and Kaggle also enforces the configured
+encoded-notebook limit. Native downloads retry whole archives rather than
+resuming byte offsets.
+
+An optional pinned Anatomy checkout and Node runtime can supply spring-state
+control samples with matching pose and readout. These are mechanism control
+visualizations, not a general physics engine or proof of downstream model
+motion adherence. Tools, models and provider capabilities remain recipe-specific.
 
 ## What this checkout contains
 
@@ -57,6 +79,11 @@ Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter
   asset registration with fixed-version lookup.
 - **Remote and API workflows** *(rc7)*: Parent/worker recipes, typed model
   profiles, host credential bindings and bounded per-shot QC recovery.
+- **GPU worker scheduling** *(rc8)*: Native private Kaggle and SSH jobs,
+  explicit CUDA requirements, dynamic device queues, optional within-card
+  sharing, global Blender segments and verified continuation.
+- **Worker preparation and diagnostics** *(rc8)*: Pinned tool archives,
+  scoped credentials, early contract checks and read-only edit patch impact.
 
 ## Install
 
@@ -80,7 +107,10 @@ Run the contributor verification suite from the checkout:
 ```
 
 That runs public hygiene, offline pytest, then live Kaggle/API pytest, then `.venv/Scripts/python -m fsf.cli live-check`.
-Kaggle credentials: `KAGGLE_CONFIG_DIR` or `~/.kaggle/kaggle.json`. The key is never printed. Missing credentials **fail** the live gate; do not skip.
+Kaggle authentication can use `KAGGLE_API_TOKEN`, an authorized host credential
+binding, or existing legacy credentials (`KAGGLE_CONFIG_DIR` or
+`~/.kaggle/kaggle.json`). Values are never printed. Missing usable credentials
+**fail** the live gate; do not skip.
 
 `.venv/Scripts/python -m fsf.cli run` defaults to **`mock.studio.video`** (writes `.mock.bin`, not media). `flow run` requires `--transport` and `--shape` and refuses mock executors. Built-in kaggle/api/local shape adapters write `.shape.bin`; configured process adapters used by `fsf execute` can produce real media. `verify` on those files is expected to fail.
 

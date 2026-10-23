@@ -211,6 +211,14 @@ def validate_request(request):
     contract = request["expected_media_contract"]
     if request["parent"]["expected_contract_digest"] != (digest(contract) if contract is not None else None):
         raise RemoteError("REMOTE_CONTRACT_DIGEST")
+    if any(a["role"] == "video" for step in recipe["steps"] for a in step["outputs"]) and not contract:
+        raise RemoteError("REMOTE_QC_CONTRACT_REQUIRED")
+    if contract is not None:
+        from fsf.conformance.media import validate_media_expected
+        try:
+            validate_media_expected(contract)
+        except (ValueError, TypeError):
+            raise RemoteError("REMOTE_QC_CONTRACT_INVALID") from None
     requirements = request["consistency_requirements"]
     if request["parent"]["requirements_digest"] != (requirements.get("requirements_digest") if requirements else None):
         raise RemoteError("REMOTE_REQUIREMENTS_DIGEST")

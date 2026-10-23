@@ -1,6 +1,6 @@
 """Public-export hygiene gate (prodocux-labs allowlist style).
 
-Tracked files must be on the file allowlist. Operator gitignored files
+Tracked and non-ignored untracked files must be on the file allowlist. Operator gitignored files
 (AGENTS.local.md, fsf-executors.json, .env) are out of scope unless committed.
 """
 
@@ -32,6 +32,7 @@ PUBLIC_FILES = {
     "compatibility/pdx_official_pin_rc7_a8_a3.json",
     "docs/DATA_GOVERNANCE.md",
     "docs/FSF_LIVE_VERIFY.md",
+    "docs/REMOTE_DATA_PLANE.md",
     "docs/RELEASE.md",
     "fsf-executors.example.json",
     "pyproject.toml",
@@ -251,13 +252,13 @@ def inspect_entry(rel_s: str, path: Path, *, max_bytes: int = MAX_FILE_BYTES) ->
 def tracked_files(root: Path | None = None) -> list[Path]:
     base = root or ROOT
     completed = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=base,
         check=False,
         capture_output=True,
     )
     if completed.returncode != 0:
-        raise RuntimeError("git ls-files failed; hygiene scans the tracked public tree")
+        raise RuntimeError("git ls-files failed; hygiene scans the public source union")
     names = [item.decode("utf-8", errors="replace") for item in completed.stdout.split(b"\0") if item]
     return [base / name for name in names]
 

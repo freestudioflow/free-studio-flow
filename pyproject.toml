@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "free-studio-flow"
-version = "0.1.0rc7"
+version = "0.1.0rc8"
 description = "AI-native film factory and Studio flows on top of ProDocuX contracts"
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,8 +29,10 @@ dependencies = [
 
 [project.optional-dependencies]
 api = ["boto3>=1.35,<2"]
+remote = ["boto3>=1.40,<2"]
 credentials = ["keyring>=25,<26"]
 dev = [
+  "cryptography>=43,<49",
   "build>=1.2,<2",
   "setuptools>=77",
   "wheel>=0.45",
@@ -58,6 +60,7 @@ where = ["src"]
 "fsf.conformance" = ["*.schema.json"]
 "fsf.schemas" = ["*.schema.json"]
 "fsf.remote.templates" = ["*.json", "*.md"]
+"fsf.tools" = ["*.mjs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

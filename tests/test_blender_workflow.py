@@ -268,7 +268,7 @@ def test_failure_does_not_publish_partial_bundle(real_scene, tmp_path, monkeypat
     monkeypatch.setattr(runtime,"probe_blender",lambda _: {"version":"3.2.2","engine":"CYCLES","device":"CPU"})
     def fail(*args,**kwargs):
         if failure=="cancel":raise KeyboardInterrupt()
-        return SimpleNamespace(timed_out=failure=="timeout",returncode=1)
+        return SimpleNamespace(timed_out=failure=="timeout",returncode=1,stderr="")
     monkeypatch.setattr(runtime,"run_safe_subprocess",fail)
     with pytest.raises(BlenderError,match={"timeout":"DEADLINE","cancel":"CANCELLED","nonzero":"TOOL_FAILED"}[failure]):
         execute_blender_plan(compile_blender_plan(request(rec)),source_root=source,output_root=tmp_path,executable=exe,trusted_scene=True)

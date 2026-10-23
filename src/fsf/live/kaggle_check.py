@@ -16,7 +16,8 @@ from typing import Any
 
 from fsf.executors.kaggle import KaggleLtx23Executor
 from fsf.intake.compiler import compile_job
-from fsf.live.credentials import apply_kaggle_config_env, inspect_kaggle_credentials
+from fsf.live.credentials import kaggle_credential_environment, inspect_kaggle_credentials
+from fsf.executors.subprocess_safety import run_safe_subprocess
 from fsf.runtime.external_op import create_fsf_external_op, scrub_secrets
 from fsf.studio.catalog import executor_id_for
 from fsf.studio.runner import run_studio_flow
@@ -37,27 +38,32 @@ def ping_kaggle_api(*, timeout_seconds: int = 60) -> dict[str, Any]:
     if not binary:
         return {"ok": False, "error": "kaggle CLI is not installed (pip install kaggle)"}
     try:
-        completed = subprocess.run(
-            [binary, "kernels", "list", "--mine", "--page-size", "1"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            env=apply_kaggle_config_env(),
-        )
+        with kaggle_credential_environment() as env:
+            completed = run_safe_subprocess(
+                [binary, "kernels", "list", "--mine", "--page-size", "1"],
+                timeout_seconds=timeout_seconds, env=env, inherit_env=False,
+                output_limit_bytes=16384,
+            )
     except FileNotFoundError:
         return {"ok": False, "error": "kaggle CLI is not installed"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "kaggle API timed out"}
+    except Exception:
+        return {"ok": False, "error": "Kaggle credential resolution or API probe failed", "code": "KAGGLE_PROBE_FAILED"}
+
+    if completed.timed_out:
+        return {"ok": False, "error": "kaggle API timed out", "code": "KAGGLE_TIMEOUT"}
 
     text = (completed.stdout or "") + (completed.stderr or "")
     lowered = text.lower()
     if completed.returncode == 0:
         return {"ok": True, "error": None, "listed": True}
     if "401" in text or "unauthorized" in lowered or "invalid" in lowered:
-        return {"ok": False, "error": "Kaggle API rejected credentials (unauthorized)"}
+        return {"ok": False, "error": "Kaggle API rejected credentials (unauthorized)", "code": "KAGGLE_AUTH_REJECTED"}
+    if "403" in text or "forbidden" in lowered:
+        return {"ok": False, "error": "Kaggle API permission denied", "code": "KAGGLE_FORBIDDEN"}
     if "failed to resolve" in lowered or "name or service not known" in lowered or "getaddrinfo" in lowered:
-        return {"ok": False, "error": "kaggle API unreachable (network)"}
+        return {"ok": False, "error": "kaggle API unreachable (network)", "code": "KAGGLE_UNREACHABLE"}
     return {
         "ok": False,
         "error": f"kaggle kernels list --mine failed (exit {completed.returncode})",
@@ -93,7 +99,7 @@ def build_private_kaggle_job(docx_path: Path, out_dir: Path) -> dict[str, Any]:
 
     return {
         "ok": job_data.get("is_private") is True and not leaked,
-        "job_file": str(job_file),
+        "job_file": job_file.name,
         "is_private": job_data.get("is_private") is True,
         "task_count": manifest["task_count"],
         "source_sha256": manifest["source_sha256"],
@@ -142,12 +148,7 @@ def verify_kaggle_work(docx_path: Path, out_dir: Path) -> dict[str, Any]:
         "ok": ok,
         "skipped_local": True,
         "submit_gpu": os.environ.get("FSF_KAGGLE_SUBMIT") == "1",
-        "credentials": {
-            "ok": creds.get("ok"),
-            "username": creds.get("username"),
-            "config_dir": creds.get("config_dir"),
-            "has_key": creds.get("has_key"),
-        },
+        "credentials": {**creds, "authenticated": api.get("ok")},
         "api": api,
         "job": job,
         "generate_shape": {

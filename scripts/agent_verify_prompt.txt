@@ -1,5 +1,7 @@
 Run the FSF live verification gate. Do not invent a different test plan.
 
+Applies equally to Codex, Cursor, Antigravity, and Muse.
+
 Working directory: this repository root.
 Python: `.venv/Scripts/python` (Unix: `.venv/bin/python`). Do not use a global `python` or a bare `fsf` from PATH.
 Command: .venv/Scripts/python scripts/agent_verify.py

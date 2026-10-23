@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "status", "static_ok", "ready_for_dispatch", "verified_execution", "checks"],
+  "properties": {
+    "schema_version": {"const": "fsf_remote_preflight_v1"},
+    "status": {"enum": ["passed", "failed", "unverified"]},
+    "static_ok": {"type": "boolean"}, "ready_for_dispatch": {"type": "boolean"},
+    "verified_execution": {"const": false},
+    "checks": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["phase", "check", "status", "code"],
+      "properties": {
+        "phase": {"enum": ["static", "provider", "runtime"]},
+        "check": {"enum": ["declarations", "files", "connection", "environment"]},
+        "status": {"enum": ["passed", "failed", "unverified"]},
+        "code": {"type": "string", "pattern": "^REMOTE_[A-Z_]+$", "maxLength": 96}
+      }
+    }}
+  }
+}

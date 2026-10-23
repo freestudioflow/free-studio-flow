@@ -68,6 +68,10 @@ def run_worker(bundle, *, output_root, approved_recipe, remaining_seconds=None):
                 else:env[name] = os.environ[name]
             env.update(FSF_REMOTE_DEPTH="1", OMP_NUM_THREADS=str(request["policy"]["cpu"]),
                        OPENBLAS_NUM_THREADS=str(request["policy"]["cpu"]))
+            from fsf.remote.environment import INSTALL_NETWORK, install_environment
+            # Host-managed installation settings must not become job credentials.
+            for name in INSTALL_NETWORK:
+                env.pop(name, None)
             replacements = {"python": sys.executable}
             for tool in ("ffmpeg", "blender"):
                 value = shutil.which(tool)
@@ -95,16 +99,20 @@ def run_worker(bundle, *, output_root, approved_recipe, remaining_seconds=None):
                     result.append(value)
                 return result
 
-            def run(args):
+            def run(args, *, installation=False):
                 remaining = deadline-time.monotonic()
                 if remaining <= 0:
                     raise RemoteError("REMOTE_DEADLINE_EXCEEDED")
-                res = run_safe_subprocess(resolve(args), cwd=directory, env=env, inherit_env=False,
+                effective_env = install_environment(env, request["policy"]["credential_env_names"]) if installation else env
+                res = run_safe_subprocess(resolve(args), cwd=directory, env=effective_env, inherit_env=False,
                     timeout_seconds=remaining, output_limit_bytes=1024*1024,
                     cancel_check=lambda:(root/(key+".cancel")).exists())
                 if res.timed_out:
                     raise RemoteError("REMOTE_DEADLINE_EXCEEDED")
                 if res.returncode:
+                    if installation and any(name in request['policy']['credential_env_names'] for name in INSTALL_NETWORK):
+                        from fsf.remote.environment import installation_error
+                        raise RemoteError(installation_error(res.stderr))
                     raise RemoteError("REMOTE_COMMAND_FAILED")
                 size = sum(p.stat().st_size for p in directory.rglob("*") if p.is_file())
                 if size > request["policy"]["disk_mb"]*1024*1024:
@@ -124,7 +132,19 @@ def run_worker(bundle, *, output_root, approved_recipe, remaining_seconds=None):
                 for setup in recipe["environment"]["setup"]:
                     if setup["source"] not in request["policy"]["network_sources"]:
                         raise RemoteError("REMOTE_NETWORK_NOT_AUTHORIZED")
-                    run(setup["args"])
+                    run(setup["args"], installation=True)
+                    if 'fsf.remote.environment' in setup['args']:
+                        from fsf.remote.contracts import check_digest
+                        args = setup['args']
+                        pinned = args[args.index('--digest')+1]
+                        if not re.fullmatch('[0-9a-f]{64}',pinned):
+                            raise RemoteError('REMOTE_ENVIRONMENT_DIGEST')
+                        receipt = read_json(safe_path(directory,'.prepared-tools/'+pinned+'/receipt.json'))
+                        check_digest(receipt,'receipt_digest')
+                        if receipt.get('environment_digest') != pinned:
+                            raise RemoteError('REMOTE_ENVIRONMENT_DIGEST')
+                        environment.setdefault('prepared_tools',[]).append({
+                            'environment_digest':pinned,'receipt_digest':receipt['receipt_digest'],'tools':receipt['tools']})
                 environment["setup_seconds"] = time.monotonic()-phase
                 environment["python"] = platform.python_version()
                 import importlib.metadata

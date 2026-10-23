@@ -31,11 +31,11 @@ def _source_sha(path):
     return h.hexdigest()
 
 
-def _inspect(path, scratch):
+def _inspect(path, scratch, *, deadline=None):
     ffmpeg, ffprobe = ensure_media_tools_on_path()
     if not ffmpeg or not ffprobe:
         raise BlenderError("CONTROL_TOOLS_UNAVAILABLE")
-    deadline = time.monotonic() + 120
+    deadline = min(deadline,time.monotonic()+120) if deadline is not None else time.monotonic()+120
 
     def run(args):
         remaining = deadline - time.monotonic()

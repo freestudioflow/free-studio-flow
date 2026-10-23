@@ -1,0 +1,231 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_remote_profile_v2"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "transport": {
+      "enum": [
+        "local",
+        "ssh",
+        "kaggle"
+      ]
+    },
+    "authorized": {
+      "type": "boolean"
+    },
+    "approved_recipes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "minItems": 0,
+      "maxItems": 64
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "cpu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "gpu": {
+          "type": "boolean"
+        },
+        "ram_mb": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 65536
+        },
+        "disk_mb": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 65536
+        },
+        "deadline_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "network_sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "credential_env_names": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          }
+        }
+      },
+      "required": [
+        "cpu",
+        "gpu",
+        "ram_mb",
+        "disk_mb",
+        "deadline_seconds",
+        "network_sources",
+        "credential_env_names"
+      ],
+      "additionalProperties": false
+    },
+    "settings": {
+      "type": "object"
+    },
+    "gpu_limits": {
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "backends": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "cuda"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "max_devices": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "max_vram_mb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 131072
+        }
+      },
+      "required": [
+        "allowed",
+        "backends",
+        "max_devices",
+        "max_vram_mb"
+      ],
+      "additionalProperties": false
+    },
+    "store_binding": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "config_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "input_prefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_prefix": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "store_id",
+        "config_digest",
+        "input_prefix",
+        "output_prefix"
+      ],
+      "additionalProperties": false
+    },
+    "group_limits": {
+      "type": "object",
+      "properties": {
+        "max_budget_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "max_total_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "max_attempts_per_segment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "max_frames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 96
+        }
+      },
+      "required": [
+        "max_budget_seconds",
+        "max_total_attempts",
+        "max_attempts_per_segment",
+        "max_frames"
+      ],
+      "additionalProperties": false
+    },
+    "allocation": {
+      "type": "object",
+      "properties": {
+        "allocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+        },
+        "state_root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "max_submissions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "max_execution_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 604800
+        }
+      },
+      "required": [
+        "allocation_id",
+        "state_root",
+        "max_submissions",
+        "max_execution_seconds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile_id",
+    "transport",
+    "authorized",
+    "approved_recipes",
+    "policy",
+    "settings",
+    "gpu_limits",
+    "store_binding",
+    "group_limits",
+    "allocation"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,9 +1,11 @@
 include README.md LICENSE AGENTS.md AGENTS.local.example.md SECURITY.md
 include fsf-executors.example.json
 include docs/RELEASE.md docs/FSF_LIVE_VERIFY.md docs/DATA_GOVERNANCE.md
+include docs/REMOTE_DATA_PLANE.md
 include compatibility/*.json
 recursive-include scripts *.py *.txt *.json
 recursive-include tests *.py
 include tests/fixtures/edit_post_plan_shape.json tests/fixtures/edit_blender_plan_shape.json
 recursive-include src/fsf/schemas *.schema.json
 recursive-include src/fsf/remote/templates *.json *.md
+recursive-include src/fsf/tools *.mjs

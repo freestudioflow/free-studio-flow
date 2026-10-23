@@ -12,6 +12,29 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Release notes (0.1.0rc8)
+
+The source checkout adds:
+
+- Native private Kaggle API submission and output collection, plus SSH/SCP
+  dispatch to existing worker disks. The v1 Kaggle route retains its CPU policy.
+- Explicit Cycles/CUDA requirements and GPU UUID assignment, with configurable
+  device queues, bounded retries, optional within-card sharing and memory
+  reservations. GPU rendering and CPU video encoding remain separate.
+- Global-frame Blender segments, verified checkpoints and pause/continuation.
+  Provider cancellation does not guarantee preservation of uncollected outputs.
+- Pinned worker tool preparation, early media-contract checks, scoped host
+  credentials and sanitized capability diagnostics.
+- Optional Anatomy spring-state control sampling through an external pinned
+  checkout and Node runtime, without adding a Studio skill or Python dependency.
+- Read-only edit patch-impact reporting and private source-change diagnostics.
+
+Native archives remain limited to 64 MiB, with a separate configured Kaggle
+notebook-size limit. Native transfer retries whole archives, not byte offsets.
+Worker recipes and tools require host-specific verification; these changes do
+not certify every GPU architecture, model or provider modality. Technical QC
+does not grant motion or listening approval.
+
 ## Release notes (0.1.0rc7)
 
 Version `0.1.0rc7` is available on PyPI and GitHub Releases:

@@ -1,0 +1,62 @@
+{
+  "type": "object",
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "store_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+    },
+    "object_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "version_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 21474836480
+    },
+    "role": {
+      "enum": [
+        "video",
+        "audio",
+        "control_video",
+        "control_frame",
+        "model",
+        "scene",
+        "reference_image",
+        "data",
+        "worker_wheel"
+      ]
+    },
+    "media_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    }
+  },
+  "required": [
+    "artifact_id",
+    "store_id",
+    "object_key",
+    "version_id",
+    "sha256",
+    "size_bytes",
+    "role",
+    "media_type"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

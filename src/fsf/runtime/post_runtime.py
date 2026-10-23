@@ -105,6 +105,8 @@ class PostContext:
                     "bindings": [sources[s["source_id"]]["binding"] for s in self.edit["sources"] if s["source_id"] in sources]}
         _shape(manifest, "fsf_post_source_manifest_v1")
         if self.bindings is not None and manifest != self.bindings:
+            from fsf.runtime.private_diagnostics import source_changed
+            source_changed('binding_recheck')
             raise PostError("POST_SOURCE_CHANGED")
         self.bindings = manifest
         return sources
