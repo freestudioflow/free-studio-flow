@@ -5,7 +5,7 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc7`**, available on PyPI.
+The current published pre-release is **`0.1.0rc8`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
@@ -14,7 +14,8 @@ pins leave rc/a.
 
 ## Release notes (0.1.0rc8)
 
-The source checkout adds:
+Version `0.1.0rc8` is available on PyPI and GitHub Releases, published from
+tag `v0.1.0rc8` at commit `28eaf9f87e02affc64d1accdb3fbc1db301e4714`:
 
 - Native private Kaggle API submission and output collection, plus SSH/SCP
   dispatch to existing worker disks. The v1 Kaggle route retains its CPU policy.
@@ -117,10 +118,10 @@ PyPI versions are immutable: do not rebuild or re-upload an already-published
 version.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc7"
+python -m pip install "free-studio-flow==0.1.0rc8"
 ```
 
-The command above installs rc7. To develop against a checkout:
+The command above installs rc8. To develop against a checkout:
 
 ```powershell
 python -m venv .venv
@@ -161,10 +162,10 @@ them private and exclude them from release attachments.
 .\.venv\Scripts\python.exe -m twine check dist\*
 ```
 
-Published distribution filenames for `0.1.0rc7`:
+Published distribution filenames for `0.1.0rc8`:
 
-- `dist/free_studio_flow-0.1.0rc7-py3-none-any.whl`
-- `dist/free_studio_flow-0.1.0rc7.tar.gz`
+- `dist/free_studio_flow-0.1.0rc8-py3-none-any.whl`
+- `dist/free_studio_flow-0.1.0rc8.tar.gz`
 
 For future releases, build from the final commit and publish the approved
 distributions unchanged to GitHub Releases and PyPI. PyPI publication requires

@@ -11,17 +11,17 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc8`**.
 
-Latest verified PyPI release: **[`0.1.0rc7`](https://pypi.org/project/free-studio-flow/0.1.0rc7/)**,
-published from tag **[`v0.1.0rc7`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc7)**
-at commit `aafe4328a5a30030c8178c0e16aa637c26e573e6`.
+Latest verified PyPI release: **[`0.1.0rc8`](https://pypi.org/project/free-studio-flow/0.1.0rc8/)**,
+published from tag **[`v0.1.0rc8`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc8)**
+at commit `28eaf9f87e02affc64d1accdb3fbc1db301e4714`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc7"
+python -m pip install "free-studio-flow==0.1.0rc8"
 ```
 <!-- pypi-release-status:end -->
 
-Features marked rc7 are included in the published rc7 package. Source additions
-are versioned separately below.
+The published rc8 package includes the rc7 features and the rc8 additions
+described below.
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
 
@@ -32,7 +32,7 @@ profiles for text, image, video, audio and upscale outputs. Copy the disabled
 templates with `fsf remote templates --out config` into an existing empty
 directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
 for setup, recovery, provider protocol limits and recipe customization.
-These workflows are included in the rc7 distributions.
+These workflows are included in the rc8 distributions.
 Remote outputs retain parent-side QC and review requirements; successful transport
 does not establish real model inference or visual consistency.
 
@@ -43,8 +43,8 @@ Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter
 Pinned tool preparation, provider-native artifact transfer, explicit v2 CUDA requests
 and global Blender segments are described in
 [Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions require a
-matching source-built parent and worker; the published rc7 package uses the v1
-path. GPU execution still requires operator resource approval and verified host
+matching rc8 parent and worker installations. GPU execution still requires
+operator resource approval and verified host
 capability. Technical control-video checks leave motion review `not_reviewed`.
 
 Approved worker recipes can fill free GPU slots as tasks finish, bind selected
@@ -524,7 +524,7 @@ explicit `audio: "forbidden"` or `audio: "required"` entry (no
 `expected_media_contract_source: "intake_default"` marker), the source QC
 contract is left untouched by any `--audio` flag.
 
-## Edit metadata commands (rc7 release candidate)
+## Edit metadata commands (introduced in rc7)
 
 `fsf edit` manages a versioned edit description. The metadata commands below
 do not read media or establish source QC/review authority. For verified source
@@ -577,7 +577,7 @@ on local filesystems; it does not provide distributed locking or a guarantee
 of zero data loss on power failure. Source declarations remain declarations,
 not proof that a media file is valid or approved.
 
-## Verified post-production (rc7 release candidate)
+## Verified post-production (introduced in rc7)
 
 Edit existing real videos without dispatching new generation jobs. Source
 imports require an exact production plan, execution journal, job manifest,
@@ -718,7 +718,7 @@ padding missing audio with silence when needed for concatenation. An explicitly
 disabled mix uses this same source-audio path. Post-production does not render
 Blender scenes or register assets; use the separate commands below for those tasks.
 
-### Audio mixing (rc7 release candidate)
+### Audio mixing (introduced in rc7)
 
 An optional [`audio_mix`](src/fsf/schemas/fsf_audio_mix_v1.schema.json) in an edit
 selects exact sources, tracks, events and sample ranges. The existing
@@ -801,7 +801,7 @@ require an ordinary preview instead. A/B WAVs and video previews are previews,
 not human listening approval. Numeric measurements cannot establish intelligibility
 or whether background music masks speech.
 
-## Library asset validation (rc7 release candidate)
+## Library asset validation (introduced in rc7)
 
 The Python API `fsf.core.asset_library.validate_asset_record(record,
 resource_root=...)` checks a
@@ -841,7 +841,7 @@ filesystem replacement. Consumers must re-check files when using them.
 
 ## Blender assets and motion controls
 
-These commands describe the rc7 release candidate; rc7 is not yet published.
+These local commands were introduced in rc7 and are included in rc8.
 
 `fsf blender` runs controlled, trusted small scenes with CPU Cycles. Supported
 profiles are `reference` (one frame, up to two named cameras) and `clay_v1`
