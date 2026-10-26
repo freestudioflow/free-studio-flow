@@ -11,19 +11,17 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc9`**.
 
-The rc9 source is a release candidate and has not yet been published.
-
-Latest verified PyPI release: **[`0.1.0rc8`](https://pypi.org/project/free-studio-flow/0.1.0rc8/)**,
-published from tag **[`v0.1.0rc8`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc8)**
-at commit `28eaf9f87e02affc64d1accdb3fbc1db301e4714`.
+Latest verified PyPI release: **[`0.1.0rc9`](https://pypi.org/project/free-studio-flow/0.1.0rc9/)**,
+published from tag **[`v0.1.0rc9`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc9)**
+at commit `bca390ff1a2cd47009521fd98b0b8b809013305d`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc8"
+python -m pip install "free-studio-flow==0.1.0rc9"
 ```
 <!-- pypi-release-status:end -->
 
-The published rc8 package includes the rc7 features and the rc8 additions
-described below.
+The published rc9 package includes the earlier releases and the rc9 production
+and extension features described below.
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
 
@@ -34,8 +32,8 @@ profiles for text, image, video, audio and upscale outputs. Copy the disabled
 templates with `fsf remote templates --out config` into an existing empty
 directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
 for setup, recovery, provider protocol limits and recipe customization.
-These workflows are included in the rc8 distributions.
-The production extensions below require the rc9 source or matching rc9 builds.
+These workflows and the production extensions below are included in the rc9
+distributions. Use matching parent and worker builds.
 Remote outputs retain parent-side QC and review requirements; successful transport
 does not establish real model inference or visual consistency.
 
@@ -87,13 +85,13 @@ motion adherence. Tools, models and provider capabilities remain recipe-specific
   sharing, global Blender segments and verified continuation.
 - **Worker preparation and diagnostics** *(rc8)*: Pinned tool archives,
   scoped credentials, early contract checks and read-only edit patch impact.
-- **Production preparation and recovery** *(rc9 candidate)*: Full control-source
+- **Production preparation and recovery** *(rc9)*: Full control-source
   import, capability-driven segments, portable generated-frame checkpoints,
   bounded parent batches and exact-unit budgets.
-- **Operator extensions** *(rc9 candidate)*: Experimental recipes, trusted
+- **Operator extensions** *(rc9)*: Experimental recipes, trusted
   command adapters and custom multimodal HTTP profiles. Examples are starting
   points, not a list of permitted models or host vendors.
-- **Production evidence** *(rc9 candidate)*: Declared world state, dialogue
+- **Production evidence** *(rc9)*: Declared world state, dialogue
   coverage and hierarchical quality reports. These records support workflows
   targeting long takes and feature films; actual motion, visual quality,
   listening review and hardware qualification need their own evidence.

@@ -5,17 +5,17 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc8`**, available on PyPI.
+The current published pre-release is **`0.1.0rc9`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
-## Release notes (0.1.0rc9 candidate)
+## Release notes (0.1.0rc9)
 
-The source version is `0.1.0rc9`. This candidate has not been tagged or published;
-the verified published version remains rc8.
+Version `0.1.0rc9` is available on PyPI and GitHub Releases, published from
+tag `v0.1.0rc9` at commit `bca390ff1a2cd47009521fd98b0b8b809013305d`.
 
 - Import complete control sources through the production v2 contract and compile
   global core/context segments from declared backend capabilities. The legacy
@@ -36,6 +36,8 @@ the verified published version remains rc8.
   submission budget, preserve known job identity, and recover a published
   receipt after a ledger-update interruption. Unknown submissions require
   reconciliation before another dispatch.
+- Detect and redact classic and stateless GitHub App installation tokens in
+  public-tree scanning and process/external-operation diagnostics.
 - Stage oversized encoded Kaggle notebook inputs as private `payload.bin`
   datasets with byte-SHA checks. Transport metadata preserves existing file
   licenses instead of declaring the payload public domain.
@@ -46,7 +48,7 @@ separate mechanisms. Use short Windows working roots for deeply nested
 checkpoint hashes. Unqualified capability probes remain explicitly probe-only.
 Actual three-minute neural long takes, two-hour films, large-card hardware and
 calibrated visual-quality statistics require separate qualification; they are
-not claims made by this candidate. An optional enhancement backend needs its
+not claims made by this release. An optional enhancement backend needs its
 own successful tool/model validation before use.
 
 ## Release notes (0.1.0rc8)
@@ -155,10 +157,10 @@ PyPI versions are immutable: do not rebuild or re-upload an already-published
 version.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc8"
+python -m pip install "free-studio-flow==0.1.0rc9"
 ```
 
-The command above installs rc8. To develop against a checkout:
+The command above installs rc9. To develop against a checkout:
 
 ```powershell
 python -m venv .venv
@@ -199,10 +201,10 @@ them private and exclude them from release attachments.
 .\.venv\Scripts\python.exe -m twine check dist\*
 ```
 
-Published distribution filenames for `0.1.0rc8`:
+Published distribution filenames for `0.1.0rc9`:
 
-- `dist/free_studio_flow-0.1.0rc8-py3-none-any.whl`
-- `dist/free_studio_flow-0.1.0rc8.tar.gz`
+- `dist/free_studio_flow-0.1.0rc9-py3-none-any.whl`
+- `dist/free_studio_flow-0.1.0rc9.tar.gz`
 
 For future releases, build from the final commit and publish the approved
 distributions unchanged to GitHub Releases and PyPI. PyPI publication requires
