@@ -159,6 +159,8 @@ CJK = re.compile(
 
 SECRET_PATTERNS = (
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
+    re.compile(r"ghs_[A-Za-z0-9.\-_]{36,}"),
+    re.compile(r"ghs_[A-Za-z0-9.\-_]{36,}"),
     re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
     re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}"),
     re.compile(r"(?<![A-Za-z])hf_[A-Za-z0-9]{20,}"),

@@ -278,3 +278,26 @@ def test_hygiene_includes_untracked_sources_and_excludes_operator_ignored_files(
     source.mkdir()
     (source / "unsafe.py").write_text('token = "ghp_' + "a" * 30 + '"', encoding="utf-8")
     assert any("src/unsafe.py" in hit and "secret-like" in hit for hit in hygiene.scan_public_tree(tmp_path))
+
+
+@pytest.mark.parametrize("body", ["a" * 36, "123_" + "a-b_" * 80 + "." + "c" * 100 + "." + "d" * 100])
+def test_installation_tokens_scanned_and_scrubbed(tmp_path: Path, body: str) -> None:
+    from fsf.executors.subprocess_safety import sanitize_process_text, scrub_string_secrets
+    from fsf.runtime.external_op import scrub_dict_secrets
+
+    token = "ghs_" + body
+    sample = tmp_path / "sample.txt"
+    sample.write_text("output: " + token, encoding="utf-8")
+    hits = _hygiene().inspect_entry("sample.txt", sample)
+    assert any("secret-like token pattern" in hit for hit in hits)
+    assert all(token not in hit for hit in hits)
+    assert scrub_string_secrets("before " + token + " after") == "before [REDACTED_SECRET] after"
+    assert sanitize_process_text({"output": [token]}) == {"output": ["[REDACTED_SECRET]"]}
+    assert scrub_dict_secrets({"output": [token]}) == {"output": ["[REDACTED_SECRET]"]}
+
+
+def test_installation_token_documentation_is_not_a_credential() -> None:
+    from fsf.executors.subprocess_safety import scrub_string_secrets
+    text = "ghs_ prefix and ghs_example are documentation"
+    assert scrub_string_secrets(text) == text
+    assert not any(p.search(text) for p in _hygiene().SECRET_PATTERNS)

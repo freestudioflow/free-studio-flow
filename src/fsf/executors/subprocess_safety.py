@@ -31,6 +31,7 @@ def scrub_string_secrets(text: str) -> str:
     # Scrub tokens
     text = re.sub(r"HF_[A-Za-z0-9_]+", "[REDACTED_SECRET]", text, flags=re.I)
     text = re.sub(r"ghp_[A-Za-z0-9]+", "[REDACTED_SECRET]", text)
+    text = re.sub(r"ghs_[A-Za-z0-9.\-_]{36,}", "[REDACTED_SECRET]", text)
     text = re.sub(r"sk-[A-Za-z0-9]{20,}", "[REDACTED_SECRET]", text)
     return text
 
