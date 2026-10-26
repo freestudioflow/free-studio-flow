@@ -85,17 +85,22 @@ class V2Adapter:
         self.profile=validate_profile(profile);self.store_config=str(Path(store_config).absolute())
 
     def _native(self):
-        return Path(self.store_config).is_file() and read_json(self.store_config).get('schema_version')=='fsf_kaggle_native_store_v1'
+        return Path(self.store_config).is_file() and read_json(self.store_config).get('schema_version') in {'fsf_kaggle_native_store_v1','fsf_kaggle_native_store_v2'}
+
+    def _command(self,operation,request,locator,directory,remote=None):
+        from fsf.remote.command_adapter import CommandAdapter
+        return CommandAdapter(self.profile,self.store_config).call(operation,request,locator,directory,remote)
 
     def _native_ssh(self):
         from fsf.remote.native_ssh import NativeSsh
         return NativeSsh(self._ssh(),self.store_config)
 
     def prepare(self,request,locator,directory):
+        if self.profile['transport']=='command':return self._command('prepare',request,locator,directory)
         if self.profile['transport']=='ssh' and self._native():return self._native_ssh().prepare(request,directory)
         if self.profile['transport']=='local':
             from fsf.remote.transports import LocalAdapter
-            base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation'}}
+            base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments'}}
             base['schema_version']='fsf_remote_profile_v1'
             LocalAdapter(base).prepare(None,None,None)
         elif self.profile['transport']=='ssh':self._ssh().prepare(None,None,None)
@@ -103,7 +108,7 @@ class V2Adapter:
 
     def _ssh(self):
         from fsf.remote.transports import SshAdapter
-        base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation'}}
+        base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments'}}
         base['schema_version']='fsf_remote_profile_v1'
         return SshAdapter(base)
 
@@ -116,13 +121,14 @@ class V2Adapter:
         write_json(directory/'provider-v2-call.json',payload)
         with kaggle_credential_environment() as env:
             result=run_safe_subprocess([sys.executable,'-m','fsf.remote.kaggle_native' if native else 'fsf.remote.kaggle_v2_api',str(directory/'provider-v2-call.json')],
-                env=env,inherit_env=False,timeout_seconds=120,output_limit_bytes=16384)
+                env=env,inherit_env=False,timeout_seconds=300 if native else 120,output_limit_bytes=16384)
         if result.returncode or result.timed_out:raise RemoteError('REMOTE_KAGGLE_API_FAILED')
         reply=read_json(directory/'provider-v2-response.json')
         if not reply['ok']:raise RemoteError(reply['code'])
         return reply['result']
 
     def fetch_into_store(self,request,remote,directory):
+        if self.profile['transport']=='command':return self._command('fetch',request,None,directory,remote)
         if self.profile['transport']=='ssh' and self._native():
             self._native_ssh().fetch(request,directory)
         elif self.profile['transport']=='kaggle' and self._native():
@@ -130,9 +136,10 @@ class V2Adapter:
 
     def submit(self,request,locator,directory):
         transport=self.profile['transport'];key=request['request_digest']
-        if transport in {'kaggle','ssh'}:
+        if transport in {'kaggle','ssh','command'}:
             from fsf.remote.dispatch_hold import refuse_held_submit
             refuse_held_submit(directory)
+        if transport=='command':return self._command('submit',request,locator,directory)
         if transport=='kaggle':return self._kaggle('submit',request,locator,directory)
         if transport=='ssh' and self._native():return self._native_ssh().submit(request,directory)
         if transport=='ssh':
@@ -157,6 +164,7 @@ class V2Adapter:
         return {'pid':process.pid,'request_digest':key}
 
     def status(self,request,remote,directory):
+        if self.profile['transport']=='command':return self._command('status',request,None,directory,remote)
         if self.profile['transport']=='kaggle':return self._kaggle('status',request,None,directory,remote=remote)['status']
         if self.profile['transport']=='ssh' and self._native():return self._native_ssh().status(request)
         if self.profile['transport']=='ssh':
@@ -174,12 +182,14 @@ class V2Adapter:
         return 'unknown'
 
     def reconcile(self,request,locator,directory):
+        if self.profile['transport']=='command':return self._command('reconcile',request,locator,directory)
         if self.profile['transport']=='kaggle':return self._kaggle('reconcile',request,locator,directory)
         if self.profile['transport']=='ssh' and self._native():return self._native_ssh().reconcile(request)
         # Never respawn an unknown SSH/local submission automatically.
         return None
 
     def cancel(self,request,remote,directory):
+        if self.profile['transport']=='command':return self._command('cancel',request,None,directory,remote)
         if self.profile['transport']=='kaggle':return 'unsupported'
         if self.profile['transport']=='ssh' and self._native():return self._native_ssh().cancel(request)
         if self.profile['transport']=='local':

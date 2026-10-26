@@ -34,12 +34,18 @@ def wheel_identity(path):
 
 
 def validate_recipe(value):
-    shape(value,'fsf_remote_recipe_v2');reject_inline_credentials(value)
+    version='fsf_remote_recipe_v3' if value.get('schema_version')=='fsf_remote_recipe_v3' else 'fsf_remote_recipe_v2'
+    shape(value,version);reject_inline_credentials(value)
     if seal(value,'recipe_digest')['recipe_digest']!=value['recipe_digest']:raise RemoteError('REMOTE_INTEGRITY')
     base={k:v for k,v in value.items() if k!='execution_requirements'}
     base['schema_version']='fsf_remote_recipe_v1';recipe_v1(seal(base,'recipe_digest'))
     if any(spec['artifact_id'] in {'environment','child_journal'} for step in value['steps'] for spec in step['outputs']):raise RemoteError('REMOTE_DUPLICATE_ID')
     render=value['execution_requirements']['render']
+    if version=='fsf_remote_recipe_v3':
+        from fsf.remote.model_evidence import validate_model_lock
+        validate_model_lock(value['execution_requirements'])
+        declared={s['path'] for step in value['steps'] for s in step['outputs']}
+        if value['execution_requirements']['model']['receipt_path'] not in declared:raise RemoteError('REMOTE_OUTPUTS')
     if render['device']=='cpu':
         if render['backend']!='none' or render['device_count'] or render['min_vram_mb']:raise RemoteError('REMOTE_GPU_DEVICE_MISMATCH')
     elif render['backend']!='cuda' or not 1<=render['device_count']<=16 or render['min_vram_mb']<1:raise RemoteError('REMOTE_GPU_DEVICE_MISMATCH')
@@ -60,9 +66,15 @@ def child_plan(recipe):
 
 
 def validate_profile(value,store=None):
-    shape(value,'fsf_remote_profile_v2');reject_inline_credentials(value)
-    base={k:v for k,v in value.items() if k not in {'gpu_limits','store_binding','group_limits','allocation'}}
+    schema='fsf_remote_profile_v3' if value.get('schema_version')=='fsf_remote_profile_v3' else 'fsf_remote_profile_v2'
+    shape(value,schema);reject_inline_credentials(value)
+    base={k:v for k,v in value.items() if k not in {'gpu_limits','store_binding','group_limits','allocation','allow_recipe_experiments'}}
     base=copy.deepcopy(base)
+    if value['transport']=='command':
+        from fsf.remote.command_adapter import validate_settings
+        validate_settings(value['settings'])
+        base['transport']='local'
+        base['settings']={'python':sys.executable,'worker_root':value['settings']['cwd']}
     if value['transport']=='kaggle':
         native_slot=base['settings'].pop('native_notebook',None)
         if native_slot is not None and (not isinstance(native_slot,str) or not re.fullmatch(r'fsf-[a-z0-9][a-z0-9-]{0,70}',native_slot)):
@@ -97,7 +109,8 @@ def validate_profile(value,store=None):
 
 
 def validate_request(request,store=None):
-    shape(request,'fsf_remote_request_v2');reject_inline_credentials(request)
+    schema='fsf_remote_request_v3' if request.get('schema_version')=='fsf_remote_request_v3' else 'fsf_remote_request_v2'
+    shape(request,schema);reject_inline_credentials(request)
     if seal(request,'request_digest')['request_digest']!=request['request_digest']:raise RemoteError('REMOTE_INTEGRITY')
     recipe=validate_recipe(request['recipe'])
     if request['fsf_version']!=__version__ or request['worker_core_sha256']!=worker_identity() or request['child']['plan']!=child_plan(recipe):
@@ -113,7 +126,8 @@ def validate_request(request,store=None):
     validate_definition(definition,projection)
     segment=request['segment']
     from fractions import Fraction
-    if segment['end_frame']<=segment['start_frame'] or segment['end_frame']-segment['start_frame']>96 or Fraction(**{'numerator':segment['clock']['num'],'denominator':segment['clock']['den']}) not in {Fraction(24),Fraction(24000,1001)}:
+    frame_limit=172800 if request['schema_version']=='fsf_remote_request_v3' else 96
+    if segment['end_frame']<=segment['start_frame'] or segment['end_frame']-segment['start_frame']>frame_limit or Fraction(**{'numerator':segment['clock']['num'],'denominator':segment['clock']['den']}) not in {Fraction(24),Fraction(24000,1001)}:
         raise RemoteError('REMOTE_SEGMENT_MAPPING')
     if request['policy']['gpu']!=(recipe['execution_requirements']['render']['device']=='gpu'):
         raise RemoteError('REMOTE_GPU_DEVICE_MISMATCH')
@@ -144,12 +158,23 @@ def validate_request(request,store=None):
     return copy.deepcopy(request)
 
 
+def _recipe_allowed(recipe,profile):
+    return (recipe['recipe_digest'] in profile['approved_recipes'] or
+            profile['schema_version']=='fsf_remote_profile_v3' and profile.get('allow_recipe_experiments') is True)
+
+
 def check_authorization(request,profile,store,*,new_submission=True):
     profile=validate_profile(profile,store);request=validate_request(request,store)
     if os.environ.get('FSF_REMOTE_DEPTH'):raise RemoteError('REMOTE_NESTING_FORBIDDEN')
-    if not profile['authorized'] or request['profile_id']!=profile['profile_id'] or request['adapter_digest']!=digest(profile) or request['recipe']['recipe_digest'] not in profile['approved_recipes']:
+    if not profile['authorized'] or request['profile_id']!=profile['profile_id'] or request['adapter_digest']!=digest(profile) or not _recipe_allowed(request['recipe'],profile):
         raise RemoteError('REMOTE_NOT_AUTHORIZED')
     if request['store_binding']!=profile['store_binding']:raise RemoteError('REMOTE_STORE_FORBIDDEN')
+    if request['schema_version']=='fsf_remote_request_v3':
+        mode='experimental' if profile.get('allow_recipe_experiments') is True else None
+        if request.get('execution_mode')!=mode:raise RemoteError('REMOTE_NOT_AUTHORIZED')
+        frame_limit=profile['group_limits']['max_frames']
+        if request['segment']['end_frame']-request['segment']['start_frame']>frame_limit:
+            raise RemoteError('REMOTE_SEGMENT_MAPPING')
     for key,value in request['policy'].items():
         limit=profile['policy'][key]
         if isinstance(value,list):
@@ -161,7 +186,7 @@ def check_authorization(request,profile,store,*,new_submission=True):
 
 def prepare_request(definition,recipe,*,profile,store,inputs,wheel,segment,output):
     recipe=validate_recipe(recipe);profile=validate_profile(profile,store)
-    if not profile['authorized'] or recipe['recipe_digest'] not in profile['approved_recipes']:raise RemoteError('REMOTE_NOT_AUTHORIZED')
+    if not profile['authorized'] or not _recipe_allowed(recipe,profile):raise RemoteError('REMOTE_NOT_AUTHORIZED')
     authorize_gpu(recipe['execution_requirements'],profile['gpu_limits'])
     from fsf.remote.preflight import validate_definition
     projection={k:v for k,v in recipe.items() if k!='execution_requirements'};projection['schema_version']='fsf_remote_recipe_v1'
@@ -175,13 +200,16 @@ def prepare_request(definition,recipe,*,profile,store,inputs,wheel,segment,outpu
         references.append({'artifact_id':identifier,'path':'inputs/'+identifier+suffix,'reference':ref})
     binding=digest({'parent':definition['parent'],'recipe':recipe['recipe_digest'],'inputs':references,'segment':segment})
     policy=copy.deepcopy(profile['policy']);policy['gpu']=recipe['execution_requirements']['render']['device']=='gpu'
-    request={'schema_version':'fsf_remote_request_v2','protocol_version':'2','fsf_version':__version__,
+    version='3' if recipe['schema_version']=='fsf_remote_recipe_v3' or profile.get('allow_recipe_experiments') is True else '2'
+    request={'schema_version':'fsf_remote_request_v'+version,'protocol_version':version,'fsf_version':__version__,
              'parent':definition['parent'],'profile_id':profile['profile_id'],'adapter_digest':digest(profile),
              'child':{'job_id':'child_'+binding[:24],'run_id':'run_'+binding[24:48],'attempt_id':definition['parent']['attempt_id'],'plan':child_plan(recipe)},
              'recipe':recipe,'parameters':definition['parameters'],'inputs':references,'policy':policy,
              'worker_core_sha256':worker_identity(),'worker_wheel':wheel,'video_condition':definition['video_condition'],
              'consistency_requirements':definition['consistency_requirements'],'expected_media_contract':definition['expected_media_contract'],
              'store_binding':profile['store_binding'],'segment':segment}
+    if version=='3' and profile.get('allow_recipe_experiments') is True:
+        request['execution_mode']='experimental'
     request=seal(request,'request_digest');check_authorization(request,profile,store)
     # The request is a small control object; input bytes are never embedded.
     path=root/(request['request_digest']+'.json')
@@ -238,6 +266,7 @@ def _run_worker(request,*,store,output_root,approved_recipe):
             store.get(item['reference'],output=safe_path(directory,item['path'],exists=False),state_root=transfer)
         recipe=request['recipe'];environment={'schema_version':'fsf_remote_environment_v2','python':__import__('platform').python_version(),
             'gpu_available':None,'gpu_render_verified':False,'probes':[]}
+        if request.get('execution_mode')=='experimental':environment['experimental_execution']=True
         journal_path=directory/'child-journal.json'
         journal=read_json(journal_path) if journal_path.exists() else seal({'schema_version':'fsf_remote_child_journal_v2','request_digest':key,'recipe_digest':recipe['recipe_digest'],'steps':{}},'journal_digest')
         if journal['request_digest']!=key or seal(journal,'journal_digest')['journal_digest']!=journal.get('journal_digest'):raise RemoteError('REMOTE_CHILD_JOURNAL')
@@ -336,7 +365,11 @@ def _run_worker(request,*,store,output_root,approved_recipe):
                         role=spec['role'],media_type=spec['media_type'],state_root=transfer)
                     artifacts.append({'artifact_id':spec['artifact_id'],'reference':ref})
             # GPU availability alone is never certified actual GPU execution.
-            if request['policy']['gpu'] and 'schedule_digest' not in recipe['execution_requirements']:
+            if recipe['schema_version']=='fsf_remote_recipe_v3':
+                from fsf.remote.model_evidence import verify_model_receipt
+                environment['model_execution']=verify_model_receipt(outputs,request,environment['gpu_available'])
+                environment['model_execution_verified']=environment['model_execution']['schema_version']=='fsf_model_execution_receipt_v1'
+            elif request['policy']['gpu'] and 'schedule_digest' not in recipe['execution_requirements']:
                 from fsf.runtime.blender import verify_bundle
                 candidates=list(outputs.rglob('receipt.json'))
                 verified=False
@@ -443,6 +476,8 @@ def collect_result(request,*,store,directory,recovery=False):
                 report,_=evaluate_media_file(target,expected_contract=request['expected_media_contract'])
                 if report.get('evaluation_status')!='conforms':raise RemoteError('REMOTE_QC_FAILED')
         environment=read_json(scratch/'environment.json');journal=read_json(scratch/'child-journal.json')
+        if request.get('execution_mode')=='experimental' and environment.get('experimental_execution') is not True:
+            raise RemoteError('REMOTE_ENVIRONMENT_INTEGRITY')
         if digest(environment)!=result['environment_digest'] or sha(scratch/'child-journal.json')!=result['child_journal_sha256']:
             raise RemoteError('REMOTE_ENVIRONMENT_INTEGRITY')
         shape(journal,'fsf_remote_child_journal_v2')
@@ -454,7 +489,13 @@ def collect_result(request,*,store,directory,recovery=False):
             if record['status']!='completed' or record['step_digest']!=digest(step):raise RemoteError('REMOTE_CHILD_JOURNAL')
             actual=[{'path':spec['path'],'sha256':sha(scratch/'outputs'/spec['path']),'size_bytes':(scratch/'outputs'/spec['path']).stat().st_size} for spec in step['outputs']]
             if record['outputs']!=actual:raise RemoteError('REMOTE_CHILD_JOURNAL')
-        if request['policy']['gpu'] and environment.get('gpu_render_verified') is not True:raise RemoteError('REMOTE_GPU_DEVICE_MISMATCH')
+        if request['recipe']['schema_version']=='fsf_remote_recipe_v3':
+            from fsf.remote.model_evidence import verify_model_receipt
+            actual=verify_model_receipt(scratch/'outputs',request,environment.get('gpu_available',[]))
+            measured=actual['schema_version']=='fsf_model_execution_receipt_v1'
+            if environment.get('model_execution_verified') is not measured or environment.get('model_execution')!=actual:
+                raise RemoteError('REMOTE_MODEL_EVIDENCE')
+        elif request['policy']['gpu'] and environment.get('gpu_render_verified') is not True:raise RemoteError('REMOTE_GPU_DEVICE_MISMATCH')
         if 'schedule_digest' in request['recipe']['execution_requirements']:
             from fsf.remote.gpu_batch import verify_gpu_batch
             spec=next(i for i in request['inputs'] if i['artifact_id']=='gpu_schedule')

@@ -38,10 +38,14 @@ checks that the previous version is terminal, binds the next version and exact
 source, and refuses ambiguous results. There is no browser step or per-notebook
 Secret grant. A pinned `docker_image` must match the recipe's Python version.
 
-The current native Kaggle path embeds a bounded compressed input bundle in
-the submitted notebook. The complete encoded notebook must fit
-`max_inline_notebook_bytes`; oversized inputs are rejected before submission.
-This is a product limit, not a permanent Kaggle platform limit. Large tools
+The native Kaggle path embeds a bounded compressed input bundle when its encoded
+notebook fits `max_inline_notebook_bytes`. Larger encoded inputs can use a
+private dataset containing `payload.bin`; the bootstrap checks the complete
+bundle SHA before execution. Dataset metadata retains the files' original
+ownership and licenses. Failure to establish a private dataset or verify the
+payload blocks execution. The underlying 64 MiB input-bundle limit still
+applies; dataset staging does not provide unlimited input or byte-offset resume.
+These are implementation limits, not permanent Kaggle platform limits. Large tools
 can be downloaded by an explicitly approved recipe from fixed vendor URLs,
 with SHA verification. The normal 64 MiB bundle limit is not increased.
 
@@ -222,8 +226,8 @@ Never replace a version with `latest` or use an ETag as a content SHA.
 
 `prepare-v2` requires a definition, recipe, profile, store, input-reference map,
 worker-wheel reference and segment identity. It writes a sealed request. Native
-submission then creates its bounded input bundle; Kaggle embeds that bundle in
-the notebook. `preflight-v2 --probe` distinguishes local declarations,
+submission then creates its bounded input bundle; Kaggle embeds it or mounts its
+private dataset payload as described above. `preflight-v2 --probe` distinguishes local declarations,
 store/provider connection and runtime observations; unverified capability is
 not reported as ready.
 
@@ -233,8 +237,9 @@ collection independently verifies references, child journal, environment,
 declared outputs, video QC and required acknowledgements. Human review remains
 separate.
 
-Kaggle requires a verified private CPU smoke with the same profile and store
-binding before GPU submission. Native API jobs require no worker Secrets and
+The optional Secret-backed Kaggle route requires a verified private CPU smoke
+with the same profile and store binding before GPU submission. Native API jobs
+do not use that Secret-binding gate, require no worker Secrets, and
 use `settings.native_notebook` when reusing an authorized notebook.
 
 Only the optional object-store route requires the saved-run Secret labels
@@ -291,3 +296,202 @@ The assembled control can be used through `fsf blender condition` with view
 not a story-video continuity source. Motion and listening review stay
 `not_reviewed` until a person reviews them. Technical validation is not proof
 that a downstream model follows the camera motion.
+
+## Neural-model execution contracts
+
+Explicit `fsf_remote_recipe_v3` recipes produce `fsf_remote_request_v3` requests
+through the same prepare and lifecycle entry points. The older recipe and
+request contracts retain their validation rules. The model path declares a
+CUDA device requirement and a fixed model lock instead of pretending to be a
+Cycles render or requiring an unrelated video encoder.
+
+A model lock binds an immutable repository revision, file SHA-256 values and
+precision. The worker must return a model receipt containing those observed
+file identities, selected device UUIDs, positive CUDA event duration, inference
+interval, allocation peak and hashes of declared outputs. The parent checks
+the receipt and actual returned bytes. This evidence records execution by an
+approved worker; it is not hardware attestation or proof of visual correctness.
+
+Model execution evidence remains separate from `gpu_render_verified`.
+Multimodal calibration and motion/listening review also remain separate. The
+optional model probe uses synthetic images for a small execution diagnostic;
+it is not generated story footage or a calibrated consistency evaluator.
+
+Provider-native transport does not require worker storage Secrets. The
+separate secret-backed transport continues to require its saved-run binding
+evidence. Native transport still requires an authorized profile, approved
+recipe, parent GPU switch and bounded allocation before submission.
+
+
+## Custom recipes, hosts, and APIs
+
+Reference recipes are starting points, not a provider or model allowlist. An
+execution permission, observed execution, media conformance, and human review
+are separate facts. An untested model may run within the operator's authority;
+it does not acquire qualification by running.
+
+For production intake and planning, `--media-contracts FILE` accepts an operator
+JSON object mapping shot IDs to full media conformance contracts. Use the same
+file for `fsf intake` and `fsf plan --media`; its digest is recorded in the job.
+Unknown shot IDs and invalid contracts are rejected. This allows an appropriate
+model resolution instead of treating the default 1024x576 preset as universal.
+Choose contracts before execution; changing them cannot reuse an in-flight plan.
+
+## Recipes
+
+A `fsf_remote_profile_v3` may set `allow_recipe_experiments: true` to allow
+unlisted CPU/render v2 or MODEL v3 recipe digests within its existing GPU, network, credential,
+time and allocation policy. Each actual recipe digest is still recorded and the
+request is labelled `execution_mode: experimental`. Without that explicit
+choice, `approved_recipes` remains an exact digest allowlist. Updating tools,
+weights or parameters changes the execution identity. It does not reset the
+budget or make an unresolved submission safe to repeat.
+
+Model locks accept operator model identifiers, version identifiers and precision
+labels, including quantized formats. Every declared file still has a SHA-256.
+The optional Wan worker is one recipe implementation, not a universal model
+runner and not a mandatory dependency.
+
+Experimental non-Torch workers may emit `fsf_model_execution_receipt_v2` with
+`runtime`, `runtime_metrics`, and `verification_level: observed` instead of
+`cuda_event_ms`. Other binding fields remain required. Such a result retains
+`model_execution_verified: false`; storage integrity and technical media QC
+must not be described as measured GPU model execution or semantic quality.
+The v1 measured receipt remains available and unchanged.
+
+## SSH hosts
+
+SSH uses an operator-owned host alias, known-hosts file, SSH configuration,
+Python executable and remote working root. It does not select hosts by vendor.
+An existing Vast, Runpod, EC2 or private Linux host can implement this contract.
+Renting a machine through a vendor API is separate from connecting to that
+machine. A successful test on one vendor is not a qualification of another.
+
+## Command adapters
+
+A v3 remote profile can use `transport: command`. Its `settings` contain:
+
+- `command`: an argv array beginning with an absolute executable path.
+- `files`: entries with absolute `path` and `sha256`, including the executable
+  and the adapter script. Include all code files whose identity must be pinned.
+- `cwd`: an absolute working directory.
+- `timeout_seconds`: a finite call budget from 1 through 5400 seconds.
+- `credential_env_names`: only the host environment names to pass to the adapter.
+
+The operator installs and trusts this program. FSF does not sandbox it or its
+dependencies. A workorder cannot choose a different host program. Credentials
+belong in the host credential facility, not in argv or configuration values.
+
+FSF appends two filenames to `command`: a request JSON file and the required
+response JSON file. Requests use `fsf_command_adapter_call_v1`, with `operation`,
+the exact remote `request`, `locator`, prior `remote` identity and local
+`store_config` filename. Operations are `prepare`, `submit`, `status`,
+`reconcile`, `fetch`, and `cancel`. Neither stdout nor stderr is a result channel.
+
+Responses use `fsf_command_adapter_reply_v1`, `request_digest`, `operation`, and
+`result`. Return an object for prepare/submit/fetch; submit returns the durable
+provider identity. Status is queued/running/completed/failed/cancelled/unknown.
+Reconcile returns that same provider identity, or null when it cannot establish
+one. It must never create another job. Cancel is requested/cancelled/unsupported/
+unknown; requested does not prove that billing or compute stopped.
+
+Fetch imports results into the configured artifact store. Normal FSF result,
+input/output SHA, child journal and media checks still run after fetch. A
+provider's completed status alone cannot accept an artifact. Preserve
+idempotency using the request digest, retain unknown submissions, implement
+bounded transfer retries, and test cancellation before using a paid backend.
+The submit-hold marker is checked before the adapter's submit process starts.
+
+## Model APIs
+
+`json_http_v1` profiles support custom HTTPS endpoints for text, image, video,
+audio and upscale results, including async status/fetch/reconcile/cancel routes.
+Model names are operator data. Configure request/response mappings and actual
+output contracts; changing only a capability string cannot implement a new
+provider protocol. The OpenAI chat, Gemini content and Bedrock Converse
+convenience protocols currently implement text only. A provider's other
+modalities use an appropriate HTTP profile or a trusted custom adapter.
+Provider-specific signing can be implemented in an operator adapter or a
+host-owned proxy; never put signing keys in a notebook or workorder.
+
+`fsf_model_api_profile_v2` keeps the same HTTP mappings and adds explicit
+`input_max_bytes` and `request_max_bytes`. Positive token caps, output dimensions
+and output duration are operator choices; timeout is at most 5400 seconds per
+call lifecycle. This does not assert that a model supports the declared values.
+The existing inline HTTP implementation still limits outputs to 64 MiB and
+request/input buffers to their schema limits. V2 URL results stream to disk in
+64 KiB chunks with an operator cap of at most 64 GiB, followed by the same media
+QC and atomic acceptance. Artifact hosts must be explicitly allowed; provider
+credentials are not forwarded to a different origin. Failed partial downloads
+are removed. Native byte-offset network recovery is not implied by streaming.
+Profiles using the old v1 schema retain their previous limits.
+
+Use independent live tests for required modalities. Protocol fixtures do not
+prove vendor access, quota, GPU execution, visual consistency or human approval.
+
+## Durable production parents
+
+`fsf production run-batch PLAN --driver DRIVER --ledger LEDGER --state STATE`
+executes a finite batch (at most 5400 seconds). Run it again with the same
+documents and state to observe or continue existing work. The state directory
+pins one driver configuration, plan and quality policy; use a distinct state
+directory for a different plan. A lost reply requires reconciliation, never an
+automatic second provider submission. An expired authorization can still be
+inspected and reconciled; it cannot authorize new work.
+
+The operator command driver uses `fsf_production_command_driver_v1`, `settings`
+from the command adapter contract, a trusted existing `artifact_root`, and a
+pinned `evaluator_digest`. Submit/reconcile return the same durable provider
+identity. Fetch returns an `artifact` path relative to the request's artifact
+directory and a bound content `report`. It must not create new billable work.
+This integration is operator-trusted code, not an isolation boundary. Known
+passed credential values in the response file are rejected before persistence.
+
+Budget v2 adds an authorization expiry, exact plan binding, per-shot segment
+IDs, repair-round caps and completion forecasts. Unknown provider costs remain
+reserved. Cleanup/delivery reserves cannot fund generation. At the configured
+reforecast threshold, optional work stops and essential work needs an affordable
+remaining-work estimate; `production budget-forecast` records it explicitly.
+
+## World memory, dialogue and quality coverage
+
+`production world-create`, `world-state` and `world-window` freeze and inspect
+declared assets, entities, routes and chronological events on a global frame
+clock. Ownership and carrying are separate; chapter changes do not reset facts.
+The generated requirements describe conditions a backend must implement. A
+matching acknowledgement does not prove that the resulting pixels obey them.
+
+The `fsf.production.speech` API accepts an operator ASR callback and binds its
+transcript to actual PCM bytes. `production speech-check` checks explicit event,
+track, clip and sample-time coverage. `production ducking-envelope` produces an
+additive gain envelope for a named target track, preserving the user's gain.
+An envelope is control data; rendering it is an explicit recipe operation.
+Neither transcript equality nor numeric loudness is a listening approval.
+
+`production quality-rollup MANIFEST --reports REPORTS --out OUTPUT` checks
+complete segment/chapter/film partitions and every internal segment or chapter
+join. Reports bind each full check definition, artifact, evaluator, plan and
+policy. Any missing, rejected or unknown check prevents machine acceptance.
+The result does not attest evaluator calibration or human review. Required
+checks must be pinned before evaluation; this aggregator cannot decide whether
+the operator selected sufficient artistic checks.
+
+These components support composing long-take and feature-film workflows with
+operator-selected backends. They do not guarantee pixel continuity or a
+finished high-quality film. Actual-frame continuation is implemented by the
+sequence runner; latent extraction/conversion is backend-specific. Declared
+world state and condition acknowledgements are inputs/evidence, not proof of
+visual adherence. External lease/watchdog deployment and confirmation that
+compute stopped remain host responsibilities.
+
+## Portable generated-frame checkpoints
+
+`production checkpoint-export SEQUENCE_ROOT --plan PLAN --out OUTPUT` exports
+verified completed segments as bounded index pages and 8 MiB chunks.
+`checkpoint-verify` and `checkpoint-restore` require `--plan` and an independently
+pinned `--digest`. Restore into a fresh worker root, then continue the same
+sequence plan. Existing accepted frames and initialization images are verified
+and reused; an earlier prefix cannot overwrite conflicting later progress.
+These are integrity records, not signatures or semantic-quality approvals.
+Transporting the directory is separate from rendering and does not authorize a
+new model call.

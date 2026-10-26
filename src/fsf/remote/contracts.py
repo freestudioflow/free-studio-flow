@@ -14,6 +14,7 @@ from fsf import __version__
 from fsf.conformance.digest import canonical_contract_digest as digest
 from fsf.core.asset_library import _path_parts, _no_links
 from fsf.core.edit_store import read_json, decode_json
+from fsf.core.filesystem import native_path
 from fsf.runtime.blender import sha
 
 MAX_BUNDLE_BYTES = 64 * 1024 * 1024
@@ -72,7 +73,7 @@ def check_digest(value, field):
 
 
 def write_json(path, value):
-    path = Path(path)
+    path = Path(native_path(path))
     data = json.dumps(value, allow_nan=False, indent=2).encode("utf-8")
     decode_json(data)
     fd, tmp = tempfile.mkstemp(prefix=".remote-json-", dir=path.parent)
@@ -86,7 +87,7 @@ def write_json(path, value):
         deadline=time.monotonic()+2
         while True:
             try:
-                os.replace(tmp, path)
+                os.replace(native_path(tmp), native_path(path))
                 break
             except PermissionError:
                 if time.monotonic()>=deadline:raise

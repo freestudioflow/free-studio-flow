@@ -74,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"fsf {__version__}",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    subparsers.add_parser("production", help="Long control sources and durable production preparation")
     subparsers.add_parser("edit", help="Versioned edits and post-production from verified sources")
     subparsers.add_parser("remote", help="Approved parent/worker dispatch and lifecycle operations")
     subparsers.add_parser("api", help="Typed model API profiles and verified outputs")
@@ -88,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     intake_cmd.add_argument("docx", help="Path to Word DOCX prompt sheet")
     intake_cmd.add_argument("--out", "-o", default=None, help="Output directory for job manifest and artifacts")
     intake_cmd.add_argument("--tool", default="broll.library.ltx23.t2v", help="PDX tool identifier")
+    intake_cmd.add_argument('--media-contracts',help='Operator JSON mapping of shot IDs to explicit media contracts')
 
     # plan (M2)
     plan_cmd = subparsers.add_parser(
@@ -95,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compile a DOCX prompt sheet into a pdx_execution_plan_v1",
     )
     plan_cmd.add_argument("docx", help="Path to Word DOCX prompt sheet")
+    plan_cmd.add_argument('--media-contracts',help='Same operator media-contract mapping used by intake')
     plan_cmd.add_argument("--post-sources", action="store_true", help="Add media QC for every video producer, including remaster and VFX")
     plan_cmd.add_argument("--tool", default="studio.video.generate", help="Executor tool identifier")
     plan_cmd.add_argument(
@@ -928,6 +931,9 @@ def handle_execute(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "production":
+        from fsf.cli.production import main as production_main
+        return production_main(arguments[1:])
     if arguments and arguments[0] == "api":
         from fsf.cli.model_api import main as model_api_main
         return model_api_main(arguments[1:])
@@ -948,8 +954,10 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "intake":
         docx_path = Path(args.docx)
         try:
+            from fsf.core.edit_store import read_json
             manifest, request, profile = compile_job(
-                docx_path, out_dir=args.out, tool_name=args.tool
+                docx_path, out_dir=args.out, tool_name=args.tool,
+                media_contracts=read_json(args.media_contracts) if args.media_contracts else None,
             )
             print(
                 f"[FSF Intake] Compiled {manifest['task_count']} tasks from '{docx_path.name}' "
@@ -973,7 +981,8 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "post_sources", False) and shape_mode:
                 print("[FSF Plan Error] --post-sources requires --media", file=sys.stderr)
                 return 2
-            manifest, _, _ = compile_job(docx_path)
+            from fsf.core.edit_store import read_json
+            manifest, _, _ = compile_job(docx_path,media_contracts=read_json(args.media_contracts) if args.media_contracts else None)
             plan = build_execution_plan(
                 manifest,
                 executor_tool=args.tool,

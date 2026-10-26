@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import time
 from fsf.core.edit_store import read_json
 from fsf.remote.contracts import RemoteError,digest,sha,write_json,safe_path,seal
 from fsf.remote.bundle import pack,unpack
@@ -48,6 +49,93 @@ def notebook(request,bundle):
     return {'nbformat':4,'nbformat_minor':5,'metadata':{'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},
         'kaggle':{'isGpuEnabled':request['policy']['gpu'],'isInternetEnabled':True}},
         'cells':[{'cell_type':'code','metadata':{},'execution_count':None,'outputs':[],'source':code.splitlines(keepends=True)}]}
+
+def _payload_slug(request):
+    return 'fsf-native-'+request['request_digest'][:20]
+
+def external_notebook(request,bundle_sha,slug):
+    """Mount an immutable private dataset instead of inlining the input archive."""
+    bootstrap=resources.files('fsf.tools').joinpath('remote_bootstrap_native.py').read_bytes()
+    code='import base64,hashlib,pathlib\n'
+    code+='src=pathlib.Path('+repr('/kaggle/input/'+slug+'/payload.bin')+')\n'
+    code+='data=src.read_bytes()\n'
+    code+='if hashlib.sha256(data).hexdigest()!='+repr(bundle_sha)+':\n raise SystemExit(2)\n'
+    code+="b=pathlib.Path('/tmp/fsf-native-input.zip');b.write_bytes(data)\n"
+    code+='scope={"BUNDLE":str(b),"BUNDLE_SHA":'+repr(bundle_sha)+',"DEADLINE":'+str(request['policy']['deadline_seconds'])+'}\n'
+    code+='exec(compile(base64.b64decode('+repr(base64.b64encode(bootstrap).decode())+'),"fsf_native_bootstrap","exec"),scope)\n'
+    return {'nbformat':4,'nbformat_minor':5,'metadata':{'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},
+        'kaggle':{'isGpuEnabled':request['policy']['gpu'],'isInternetEnabled':True}},
+        'cells':[{'cell_type':'code','metadata':{},'execution_count':None,'outputs':[],'source':code.splitlines(keepends=True)}]}
+
+def stage_notebook(request,store,directory):
+    try:return prepare(request,store,directory)
+    except RemoteError as exc:
+        if exc.code!='REMOTE_KAGGLE_NATIVE_INPUT_TOO_LARGE':raise
+    directory=Path(directory);bundle=directory/'native-input.zip';slug=_payload_slug(request)
+    doc=external_notebook(request,sha(bundle),slug)
+    if len(json.dumps(doc).encode())>store.profile['max_inline_notebook_bytes']:
+        raise RemoteError('REMOTE_KAGGLE_NATIVE_INPUT_TOO_LARGE')
+    write_json(directory/'worker.ipynb',doc)
+    write_json(directory/'external-payload.json',{'slug':slug,'sha256':sha(bundle),'filename':'payload.bin'})
+    return doc
+
+def dataset_source(request,owner,directory):
+    path=Path(directory)/'external-payload.json'
+    if not path.exists():return None
+    bundle=Path(directory)/'native-input.zip';slug=_payload_slug(request)
+    if read_json(path)!={'slug':slug,'sha256':sha(bundle),'filename':'payload.bin'}:
+        raise RemoteError('REMOTE_KAGGLE_POLICY')
+    return owner+'/'+slug
+
+def _private_flag(value):
+    if isinstance(value,dict):
+        for key in ('isPrivate','is_private'):
+            if isinstance(value.get(key),bool):return value[key]
+        for child in value.values():
+            found=_private_flag(child)
+            if found is not None:return found
+    elif isinstance(value,list):
+        for child in value:
+            found=_private_flag(child)
+            if found is not None:return found
+    return None
+
+def publish_private_dataset(api,ref,bundle,directory):
+    bundle=Path(bundle)
+    try:existing=api.dataset_status(ref)
+    except Exception:existing=None
+    if existing is None:
+        folder=Path(directory)/'external-dataset'
+        if folder.exists():shutil.rmtree(folder)
+        folder.mkdir()
+        shutil.copyfile(bundle,folder/'payload.bin')
+        write_json(folder/'dataset-metadata.json',{'title':ref.split('/',1)[1],'id':ref,
+            'licenses':[{'name':'other'}],'isPrivate':True,
+            'description':'Private execution payload. Each included file retains its existing ownership and license. No public redistribution rights are granted by this transport metadata.'})
+        created=api.dataset_create_new(str(folder),public=False,quiet=True,convert_to_csv=False)
+        if getattr(created,'error',None):raise RemoteError('REMOTE_KAGGLE_DATASET')
+    else:
+        listed=api.dataset_list_files(ref);rows=list(getattr(listed,'files',None) or [])
+        if (len(rows)!=1 or getattr(rows[0],'name',None)!='payload.bin'
+                or int(getattr(rows[0],'size',-1))!=bundle.stat().st_size):
+            raise RemoteError('REMOTE_KAGGLE_DATASET')
+    deadline=time.monotonic()+90
+    while True:
+        state=str(api.dataset_status(ref)).lower()
+        if state=='ready':break
+        if state in {'error','failed'} or time.monotonic()>=deadline:raise RemoteError('REMOTE_KAGGLE_DATASET')
+        time.sleep(3)
+    meta_dir=Path(directory)/'external-metadata';meta_dir.mkdir(exist_ok=True)
+    api.dataset_metadata(ref,str(meta_dir))
+    if _private_flag(read_json(meta_dir/'dataset-metadata.json')) is not True:raise RemoteError('REMOTE_KAGGLE_POLICY')
+
+def expected_notebook(request,directory):
+    directory=Path(directory);bundle=directory/'native-input.zip'
+    if not (directory/'external-payload.json').exists():return notebook(request,bundle)
+    slug=_payload_slug(request)
+    if read_json(directory/'external-payload.json')!={'slug':slug,'sha256':sha(bundle),'filename':'payload.bin'}:
+        raise RemoteError('REMOTE_KAGGLE_POLICY')
+    return external_notebook(request,sha(bundle),slug)
 
 def export_outputs(request,store,target):
     paths=[]
@@ -124,11 +212,17 @@ def call(value):
             raise RemoteError('REMOTE_KAGGLE_POLICY')
         previous=activation['previous_version'];expected['id_no']=activation['kernel_id']
     if operation=='prepare':
-        store=NativeStore(read_json(value['store_config']));prepare(request,store,directory)
+        store=NativeStore(read_json(value['store_config']));stage_notebook(request,store,directory)
+        source=dataset_source(request,owner,directory)
+        if source:
+            publish_private_dataset(api,source,directory/'native-input.zip',directory)
+            expected['dataset_sources']=[source]
         write_json(directory/'kernel-metadata.json',expected)
         return {'prepared':True,'gpu':request['policy']['gpu'],'verified_execution':False,'data_plane':'kaggle_native_v1'}
     if operation=='submit':
-        if read_json(directory/'kernel-metadata.json')!=expected or read_json(directory/'worker.ipynb')!=notebook(request,directory/'native-input.zip'):
+        source=dataset_source(request,owner,directory)
+        if source:expected['dataset_sources']=[source]
+        if read_json(directory/'kernel-metadata.json')!=expected or read_json(directory/'worker.ipynb')!=expected_notebook(request,directory):
             raise RemoteError('REMOTE_KAGGLE_POLICY')
         if fixed and _saved(api,ref).metadata.current_version_number!=previous:
             raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
@@ -147,7 +241,7 @@ def call(value):
     target_version=previous+1
     if operation=='reconcile' and fixed and saved.metadata.current_version_number==previous:return None
     if (saved.metadata.current_version_number!=target_version or not saved.metadata.is_private
-            or _normalized_notebook(saved.blob.source)!=_normalized_notebook(notebook(request,directory/'native-input.zip'))):
+            or _normalized_notebook(saved.blob.source)!=_normalized_notebook(expected_notebook(request,directory))):
         raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
     if operation=='reconcile':return {'kernel':ref,'version':target_version,'request_digest':request['request_digest'],'data_plane':'kaggle_native_v1'}
     remote=value.get('remote') or {}

@@ -236,13 +236,13 @@ def recipe_diff(before, after):
 def bind_environment(recipe, plan):
     """Produce a new, unapproved recipe; input package bytes are pinned by plan."""
     from fsf.remote.contracts import validate_recipe
-    if recipe.get('schema_version')=='fsf_remote_recipe_v2':
+    if recipe.get('schema_version') in {'fsf_remote_recipe_v2','fsf_remote_recipe_v3'}:
         from fsf.remote.v2 import validate_recipe as validate_v2
         recipe=validate_v2(recipe)
         base={k:v for k,v in recipe.items() if k!='execution_requirements'}
         base['schema_version']='fsf_remote_recipe_v1'
         result=bind_environment(seal(base,'recipe_digest'),plan)
-        result.update(schema_version='fsf_remote_recipe_v2',execution_requirements=recipe['execution_requirements'])
+        result.update(schema_version=recipe['schema_version'],execution_requirements=recipe['execution_requirements'])
         return validate_v2(seal(result,'recipe_digest'))
     recipe = validate_recipe(recipe)
     plan = validate_environment(plan, plan.get('environment_digest'))

@@ -26,7 +26,7 @@ def shape(value,name):
 
 
 def validate_store(profile):
-    if profile.get('schema_version')=='fsf_kaggle_native_store_v1':
+    if profile.get('schema_version') in {'fsf_kaggle_native_store_v1','fsf_kaggle_native_store_v2'}:
         from fsf.remote.native_store import validate
         return validate(profile)
     shape(profile,'fsf_artifact_store_v1')
@@ -57,7 +57,7 @@ def store_identity(profile):
 def store_public_identity(profile):
     """Same data authority can use different host-local secret mechanisms."""
     profile=validate_store(profile)
-    if profile['schema_version']=='fsf_kaggle_native_store_v1':
+    if profile['schema_version'] in {'fsf_kaggle_native_store_v1','fsf_kaggle_native_store_v2'}:
         return digest({k:v for k,v in profile.items() if k!='root'})
     return digest({k:v for k,v in profile.items() if k not in {'credential_bindings','credential_mode'}})
 
@@ -122,7 +122,7 @@ def _client(profile):
 
 class ArtifactStore:
     def __new__(cls,profile,**kwargs):
-        if profile.get('schema_version')=='fsf_kaggle_native_store_v1':
+        if profile.get('schema_version') in {'fsf_kaggle_native_store_v1','fsf_kaggle_native_store_v2'}:
             from fsf.remote.native_store import NativeStore
             return NativeStore(profile,**kwargs)
         return super().__new__(cls)

@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_production_segments_v1",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_production_segments_v1"
+    },
+    "logical_shot_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+    },
+    "source_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "capability_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "clock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "num": {
+              "const": 24
+            },
+            "den": {
+              "const": 1
+            }
+          },
+          "required": [
+            "num",
+            "den"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "num": {
+              "const": 24000
+            },
+            "den": {
+              "const": 1001
+            }
+          },
+          "required": [
+            "num",
+            "den"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 172800
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segment_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+          },
+          "core": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "context": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "padding_frames": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4095
+          },
+          "model_frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 172800
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "segment_id",
+          "core",
+          "context",
+          "padding_frames",
+          "model_frames",
+          "depends_on"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 172800
+    },
+    "generated_frames": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "qualification_scope": {
+      "enum": [
+        "probe_only",
+        "qualified"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "logical_shot_id",
+    "source_digest",
+    "source_sha256",
+    "capability_digest",
+    "policy_digest",
+    "clock",
+    "frame_count",
+    "segments",
+    "generated_frames",
+    "plan_digest",
+    "qualification_scope"
+  ],
+  "additionalProperties": false
+}

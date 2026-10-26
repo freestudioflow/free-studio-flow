@@ -24,9 +24,24 @@ from fsf.remote.credentials import credential_value, credential_scope, bedrock_c
 
 
 def _shape(value,name):
-    schema=json.loads(resources.files("fsf.schemas").joinpath("fsf_model_api_"+name+"_v1.schema.json").read_text("utf-8"))
+    version='2' if name=='profile' and value.get('schema_version')=='fsf_model_api_profile_v2' else '1'
+    schema=json.loads(resources.files("fsf.schemas").joinpath("fsf_model_api_"+name+"_v"+version+".schema.json").read_text("utf-8"))
     if not Draft202012Validator(schema).is_valid(value):raise RemoteError("API_SCHEMA")
     decode_json(json.dumps(value,allow_nan=False).encode())
+
+
+def _anonymous(profile):
+    """Only an explicit v2 HTTP profile can opt out of credentials."""
+    return (profile['schema_version']=='fsf_model_api_profile_v2'
+            and profile['protocol']=='json_http_v1' and profile['key_env'] is None
+            and isinstance(profile['http'],dict) and profile['http'].get('auth_header')=='none')
+
+
+def _job_identity(value,previous=None):
+    if not isinstance(value,str) or not value or len(value)>1024 or any(ord(c)<32 for c in value):
+        raise RemoteError('API_JOB_ID_INVALID')
+    if previous is not None and value!=previous:raise RemoteError('API_JOB_ID_CHANGED')
+    return value
 
 
 def validate_profile(value):
@@ -43,11 +58,13 @@ def validate_profile(value):
             raise RemoteError("API_ENDPOINT")
         if p.scheme!="https" and not (p.scheme=="http" and loopback and value["allow_loopback"]):
             raise RemoteError("API_ENDPOINT")
-        if not value["key_env"]:raise RemoteError("API_AUTH_CONFIG")
+        if not value["key_env"] and not _anonymous(value):raise RemoteError("API_AUTH_CONFIG")
     if value["protocol"] in {"openai_chat_v1","gemini_content_v1"} and value["capability"]!="text":
         raise RemoteError("API_PROTOCOL_CAPABILITY")
     if value["protocol"]=="json_http_v1":
         if value["http"] is None:raise RemoteError("API_HTTP_CONFIG")
+        if value['output']['max_bytes']>67108864 and value['http']['response_mode']!='url':
+            raise RemoteError('API_STREAMING_URL_REQUIRED')
         for route in value["http"]["routes"].values():
             if route is None:continue
             if not route.startswith("/") or route.startswith("//") or "?" in route or "#" in route or ".." in route.split("/"):
@@ -87,23 +104,39 @@ def _http(profile,method,route,body=None,*,deadline,artifact_url=None):
             raise RemoteError("API_ARTIFACT_HOST")
     remaining=deadline-time.monotonic()
     if remaining<=0:raise RemoteError("API_DEADLINE_EXCEEDED")
-    key=credential_value(profile)
-    if not key:raise RemoteError("API_AUTH_MISSING")
+    key=None if _anonymous(profile) else credential_value(profile)
+    if not key and not _anonymous(profile):raise RemoteError("API_AUTH_MISSING")
     headers={"Content-Type":"application/json"}
     header="x-goog-api-key" if profile["protocol"]=="gemini_content_v1" else (profile["http"]["auth_header"] if profile["http"] else "Authorization")
     if header!="none" and (not artifact_url or (p.scheme,p.netloc)==(base_parts.scheme,base_parts.netloc)):
         headers[header]=("Bearer " if header=="Authorization" else "")+key
     data=json.dumps(body,allow_nan=False).encode() if body is not None else None
-    if data is not None and len(data)>12*1024*1024:raise RemoteError("API_INPUT_LIMIT")
+    if data is not None and len(data)>profile.get('request_max_bytes',12*1024*1024):raise RemoteError("API_INPUT_LIMIT")
+    downloaded=None
     try:
         with build_opener(NoRedirect).open(Request(url,data=data,method=method,headers=headers),timeout=min(remaining,60)) as response:
+            if artifact_url and profile['schema_version']=='fsf_model_api_profile_v2':
+                fd,name=tempfile.mkstemp(prefix='fsf-api-download-');downloaded=Path(name)
+                total=0
+                with os.fdopen(fd,'wb') as sink:
+                    while True:
+                        if time.monotonic()>=deadline:raise RemoteError('API_DEADLINE_EXCEEDED')
+                        block=response.read1(65536)
+                        if not block:break
+                        total+=len(block)
+                        if total>profile['output']['max_bytes']:raise RemoteError('API_OUTPUT_LIMIT')
+                        if shutil.disk_usage(downloaded.parent).free<len(block):raise RemoteError('API_DISK_LIMIT')
+                        sink.write(block)
+                    sink.flush();os.fsync(sink.fileno())
+                result=downloaded;downloaded=None
+                return result
             chunks=[];total=0
             while True:
                 if time.monotonic()>=deadline:raise RemoteError("API_DEADLINE_EXCEEDED")
                 chunk=response.read1(65536)
                 if not chunk:break
                 total+=len(chunk)
-                if total>profile["output"]["max_bytes"]+1024*1024:raise RemoteError("API_RESPONSE_LIMIT")
+                if total>min(profile["output"]["max_bytes"],67108864)+1024*1024:raise RemoteError("API_RESPONSE_LIMIT")
                 chunks.append(chunk)
             return b"".join(chunks)
     except HTTPError as exc:
@@ -114,6 +147,8 @@ def _http(profile,method,route,body=None,*,deadline,artifact_url=None):
         raise RemoteError(code) from None
     except RemoteError:raise
     except Exception:raise RemoteError("API_CONNECTION_UNKNOWN") from None
+    finally:
+        if downloaded is not None:downloaded.unlink(missing_ok=True)
 
 
 def _body(template,values):
@@ -273,7 +308,7 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
     if type(tokens) is not int or not 0<tokens<=profile["max_tokens"]:raise RemoteError("API_TOKEN_LIMIT")
     source=_root(inputs_root);root=_root(state_root)
     inputs={k:safe_path(source,p) for k,p in request["inputs"].items()}
-    if any(p.stat().st_size>8*1024*1024 for p in inputs.values()):raise RemoteError("API_INPUT_LIMIT")
+    if any(p.stat().st_size>profile.get('input_max_bytes',8*1024*1024) for p in inputs.values()):raise RemoteError("API_INPUT_LIMIT")
     input_shas={k:sha(p) for k,p in inputs.items()}
     identity={"request":request,"profile":digest(profile),"inputs":input_shas}
     if credential_binding_identity(profile) is not None:
@@ -299,16 +334,32 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
             if action!="run":raise RemoteError("API_INTENT_MISSING")
             directory.mkdir()
             ledger={"request_digest":key,"profile_digest":digest(profile),"request_id":request["request_id"],"status":"prepared","job_id":None,
-                    "created_at":time.time(),"result_digest":None,"last_error":None}
+                    "created_at":time.time(),"result_digest":None,"last_error":None,"submission_started":False}
             write_json(directory/"ledger.json",seal(ledger,"ledger_digest"))
+        # Publication is atomic before the ledger update. Recover that crash
+        # window from the complete bound receipt, without contacting a provider.
+        if (directory/'accepted').exists() and ledger['status']!='completed':
+            receipt=verify_receipt(directory)
+            if receipt['request_digest']!=key or receipt['profile_digest']!=digest(profile):
+                raise RemoteError('API_INTENT_CONFLICT')
+            ledger.update(status='completed',result_digest=receipt['receipt_digest'],last_error=None)
+            write_json(directory/'ledger.json',seal(ledger,'ledger_digest'))
         if ledger["status"]=="completed":
             receipt=verify_receipt(directory)
             if receipt["request_digest"]!=key or receipt["profile_digest"]!=digest(profile) or receipt["receipt_digest"]!=ledger["result_digest"]:
                 raise RemoteError("API_INTENT_CONFLICT")
             return {"status":"completed","request_digest":key,"bundle":directory.name,"receipt_digest":receipt["receipt_digest"]}
-        deadline=time.monotonic()+max(0,profile["timeout_seconds"]-(time.time()-ledger["created_at"]))
+        extended=profile['schema_version']=='fsf_model_api_profile_v2'
+        # The original submission budget is never renewed. Observing an existing
+        # provider intent is a separate bounded operation and cannot create a job.
+        observation=extended and action in {'status','fetch','reconcile','cancel'}
+        remaining=(profile.get('observation_timeout_seconds',60) if observation else
+                   max(0,profile["timeout_seconds"]-(time.time()-ledger["created_at"])))
+        deadline=time.monotonic()+remaining
         def save():write_json(directory/"ledger.json",seal(ledger,"ledger_digest"))
         http=profile["http"]
+        if extended and ledger['status'] in {'failed','cancelled'}:
+            return {'status':ledger['status'],'request_digest':key,'error_code':ledger['last_error']}
         if action=="cancel":
             if not http or not http["routes"]["cancel"]:return {"status":ledger["status"],"cancel":"unsupported","request_digest":key}
             _http(profile,"POST",_route(http["routes"]["cancel"],ledger),{},deadline=deadline)
@@ -317,15 +368,16 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
         if action=="reconcile":
             if not http or not http["routes"]["reconcile"]:return {"status":ledger["status"],"reconcile":"unsupported","request_digest":key}
             response=decode_json(_http(profile,"GET",_route(http["routes"]["reconcile"],ledger),deadline=deadline))
-            ledger["job_id"]=pointer(response,http["job_id_pointer"]);ledger["status"]="submitted";save()
+            ledger["job_id"]=_job_identity(pointer(response,http["job_id_pointer"]),ledger['job_id']);ledger["status"]="submitted";save()
         if ledger["status"]=="submission_unknown":return {"status":"submission_unknown","request_digest":key}
         if ledger["status"] in {"failed","cancelled"}:return {"status":ledger["status"],"request_digest":key,"error_code":ledger["last_error"]}
         raw=None;data=None;reported_model=None
         try:
             if ledger["status"]=="prepared":
                 if action!="run":return {"status":"prepared","request_digest":key}
-                if profile["protocol"]!="bedrock_converse_v1" and not credential_value(profile):raise RemoteError("API_AUTH_MISSING")
-                ledger["status"]="submission_unknown";save()
+                if extended and time.monotonic()>=deadline:raise RemoteError('API_DEADLINE_EXCEEDED')
+                if profile["protocol"]!="bedrock_converse_v1" and not _anonymous(profile) and not credential_value(profile):raise RemoteError("API_AUTH_MISSING")
+                ledger.update(status="submission_unknown",submission_started=True);save()
                 if profile["protocol"]!="json_http_v1":data,raw,reported_model=_native(profile,request,deadline)
                 else:
                     values={"prompt":request["prompt"],"model":profile["model"],"request_id":request["request_id"]}
@@ -336,7 +388,7 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
                         values["inputs."+name+".data_uri"]="data:"+(mimetypes.guess_type(path.name)[0] or "application/octet-stream")+";base64,"+encoded
                     raw=_http(profile,"POST",http["routes"]["submit"],_body(http["body"],values),deadline=deadline)
                     if http["job_id_pointer"]:
-                        ledger["job_id"]=pointer(decode_json(raw),http["job_id_pointer"])
+                        ledger["job_id"]=_job_identity(pointer(decode_json(raw),http["job_id_pointer"]))
                         ledger["status"]="submitted";save()
                     else:data=_extract(profile,raw,deadline)
             if data is None:
@@ -357,7 +409,11 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
             scratch=Path(tempfile.mkdtemp(prefix=".api-output-",dir=directory))
             try:
                 name="result"+profile["output"]["suffix"]
-                target=scratch/name;target.write_bytes(data)
+                target=scratch/name
+                if isinstance(data,Path):
+                    try:shutil.copyfile(data,target)
+                    finally:data.unlink(missing_ok=True)
+                else:target.write_bytes(data)
                 reject_credential_bytes(target,[credential_value(profile) if profile["key_env"] else None])
                 quality=validate_artifact(target,profile,request,inputs,deadline)
                 if input_shas!={k:sha(p) for k,p in inputs.items()}:raise RemoteError("API_INPUT_CHANGED")
@@ -376,7 +432,15 @@ def _run_api(request,profile,*,inputs_root,state_root,action="run",wait=True):
         except Exception as exc:
             code=exc.code if isinstance(exc,RemoteError) else "API_RESPONSE_FAILED"
             ledger["last_error"]=code
-            if ledger["status"]!="submission_unknown":ledger["status"]="failed"
+            credential_error=code in {'API_AUTH_MISSING','API_SECRET_UNAVAILABLE','API_SECRET_EXPIRED','API_SECRET_REVISION','API_KEYRING_UNAVAILABLE'}
+            if credential_error and ledger['status']=='prepared' and ledger.get('submission_started') is False:
+                save();raise RemoteError(code) from None
+            recoverable=ledger['job_id'] is not None and (credential_error or (extended and code in {
+                'API_DEADLINE_EXCEEDED','API_CONNECTION_UNKNOWN','API_SUBMISSION_UNKNOWN',
+                'API_AUTH_FAILED','API_RATE_LIMITED','API_STATUS_UNKNOWN','API_AUTH_MISSING',
+                'API_SECRET_UNAVAILABLE','API_SECRET_EXPIRED','API_SECRET_REVISION','API_KEYRING_UNAVAILABLE'}))
+            if ledger["status"]!="submission_unknown" and not recoverable:
+                if not (extended and ledger['status']=='cancelled'):ledger["status"]="failed"
             save();raise RemoteError(code) from None
 
 

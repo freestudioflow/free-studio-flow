@@ -12,6 +12,43 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Release notes (0.1.0rc9 candidate)
+
+The source version is `0.1.0rc9`. This candidate has not been tagged or published;
+the verified published version remains rc8.
+
+- Import complete control sources through the production v2 contract and compile
+  global core/context segments from declared backend capabilities. The legacy
+  short Blender control path retains its original limits.
+- Export and restore generated-frame checkpoints, run finite durable parent
+  batches, and account for reservations, unknown submissions and bounded repair
+  rounds. Resource-pool admission is cooperative accounting, not GPU isolation
+  or a guarantee that an external host stops billing.
+- Use authorized experimental recipes, provider-neutral SSH, trusted command
+  adapters and custom text/image/video/audio/upscale HTTP profiles. The three
+  native chat convenience protocols still implement text; they do not define
+  the capabilities of those providers or of custom backends.
+- Retain declared world state across chapters, check dialogue event/sample
+  coverage, and aggregate segment/seam/chapter/film quality evidence. ASR and
+  ducking controls require backend/rendering integration. These interfaces do
+  not certify film quality, evaluator calibration or human review.
+- Recover API v1/v2 credential interruptions without renewing the original
+  submission budget, preserve known job identity, and recover a published
+  receipt after a ledger-update interruption. Unknown submissions require
+  reconciliation before another dispatch.
+- Stage oversized encoded Kaggle notebook inputs as private `payload.bin`
+  datasets with byte-SHA checks. Transport metadata preserves existing file
+  licenses instead of declaring the payload public domain.
+
+Native ZIP archives remain bounded to 64 MiB; this route has no byte-offset
+transfer qualification. Local chunked checkpoints and HTTP URL streaming are
+separate mechanisms. Use short Windows working roots for deeply nested
+checkpoint hashes. Unqualified capability probes remain explicitly probe-only.
+Actual three-minute neural long takes, two-hour films, large-card hardware and
+calibrated visual-quality statistics require separate qualification; they are
+not claims made by this candidate. An optional enhancement backend needs its
+own successful tool/model validation before use.
+
 ## Release notes (0.1.0rc8)
 
 Version `0.1.0rc8` is available on PyPI and GitHub Releases, published from

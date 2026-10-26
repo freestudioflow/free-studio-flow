@@ -9,7 +9,9 @@ AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocu
 License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
-Source version in this branch: **`0.1.0rc8`**.
+Source version in this branch: **`0.1.0rc9`**.
+
+The rc9 source is a release candidate and has not yet been published.
 
 Latest verified PyPI release: **[`0.1.0rc8`](https://pypi.org/project/free-studio-flow/0.1.0rc8/)**,
 published from tag **[`v0.1.0rc8`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc8)**
@@ -33,6 +35,7 @@ templates with `fsf remote templates --out config` into an existing empty
 directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
 for setup, recovery, provider protocol limits and recipe customization.
 These workflows are included in the rc8 distributions.
+The production extensions below require the rc9 source or matching rc9 builds.
 Remote outputs retain parent-side QC and review requirements; successful transport
 does not establish real model inference or visual consistency.
 
@@ -42,8 +45,8 @@ Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter
 
 Pinned tool preparation, provider-native artifact transfer, explicit v2 CUDA requests
 and global Blender segments are described in
-[Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions require a
-matching rc8 parent and worker installations. GPU execution still requires
+[Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions were introduced
+in rc8. Use matching parent and worker builds for current jobs. GPU execution requires
 operator resource approval and verified host
 capability. Technical control-video checks leave motion review `not_reviewed`.
 
@@ -84,6 +87,16 @@ motion adherence. Tools, models and provider capabilities remain recipe-specific
   sharing, global Blender segments and verified continuation.
 - **Worker preparation and diagnostics** *(rc8)*: Pinned tool archives,
   scoped credentials, early contract checks and read-only edit patch impact.
+- **Production preparation and recovery** *(rc9 candidate)*: Full control-source
+  import, capability-driven segments, portable generated-frame checkpoints,
+  bounded parent batches and exact-unit budgets.
+- **Operator extensions** *(rc9 candidate)*: Experimental recipes, trusted
+  command adapters and custom multimodal HTTP profiles. Examples are starting
+  points, not a list of permitted models or host vendors.
+- **Production evidence** *(rc9 candidate)*: Declared world state, dialogue
+  coverage and hierarchical quality reports. These records support workflows
+  targeting long takes and feature films; actual motion, visual quality,
+  listening review and hardware qualification need their own evidence.
 
 ## Install
 
@@ -929,3 +942,68 @@ path limits.
 The resulting condition uses the same capability and Handoff acknowledgement
 checks as rendered controls. Registration and acknowledgement do not prove that
 a model followed the motion. These commands do not run a generation model.
+
+### Long control preparation in this source checkout
+
+The separate production importer retains a complete control movie rather than
+requiring the operator to split it into short assets. The original Blender
+import profile above keeps its existing limits.
+
+```powershell
+fsf production import-control full-control.mp4 --out controls --control-id control_A
+fsf production verify-control controls/<bundle-id>
+fsf production segments controls/<bundle-id> --capability capability.json --shot-id shot_A --policy-digest <sha256> --out segments.json
+```
+
+Create `controls/` first. The production input profile accepts video-only CFR
+MP4, square pixels, no rotation, 24/1 or 24000/1001 fps, even dimensions from
+32 through 3840, up to 120 minutes and 64 GiB, subject to decoding and disk
+budgets. It refuses implicit conversion. Verified decode checkpoints survive
+interruption; incomplete directories are not delivery sources.
+
+Segmentation uses an explicit model capability document. The default path
+requires a verified capability; `--qualification-probe` permits an explicitly
+probe-only unqualified capability. The sequence runner likewise requires
+`allow_probe=True` for that plan. Authorized experiments do not acquire model
+qualification from a flag. Global core intervals remain separate from overlapping
+context and declared tail padding; padding is not extra delivered story time.
+The current sequence runner transfers actual generated frames for
+`previous_frame` continuation. A backend's latent conversion needs its own
+implementation and bindings; a continuity declaration alone does not supply it.
+
+`production split-artifact` and `assemble-artifact` provide content-checked
+chunks on mounted disks. A transfer adapter must transport those chunks; these
+commands do not make the old native archive limit disappear.
+
+The Python production parent supports finite leases, bounded attempts, exact
+budget reservations and provider reconciliation. Its remote driver reuses
+existing native dispatch and collection. A current-source and quality verifier
+is mandatory: provider completion does not approve story footage. These
+components can coordinate operator-supplied generation and evaluation backends
+across finite batches. Building a long-take or feature-film workflow is separate
+from demonstrating its visual quality. World-state records preserve declared
+identity, spatial and prop facts across chapters; they do not force model pixels
+to obey. ASR callbacks and ducking envelopes require explicit backend/rendering
+integration. Required missing, rejected or unknown quality checks block machine
+acceptance, which does not grant human approval or evaluator calibration.
+
+Use short working roots on Windows: deeply nested hash-based checkpoint paths
+can exceed platform path limits. Native ZIP transfer remains limited to 64 MiB;
+local checkpoint chunks and streamed HTTP outputs have separate limits.
+Large-card hardware qualification, full-length neural works and calibrated
+visual-quality statistics are not established by these software interfaces.
+
+`production calibration-corpus` checks an operator-supplied set of double
+annotations, balanced development and held-out windows, and split isolation.
+`production calibration-check` scores exactly the frozen held-out predictions
+bound to their media, evaluator and policy digests. Unknown results do not count
+as correct decisions. The tools do not supply human labels or qualify a model
+without real labeled examples; they do not change human review states.
+
+`production workorder-definition` binds a remote definition to a workorder
+already emitted by production execution. `production fulfill-remote` rechecks
+the corresponding remote result, video QC and bytes before publishing its
+Handoff result. It refuses mismatched parent IDs, attempts and contracts; it
+does not re-label an unrelated remote clip as a new production job. Resume the
+original production execution to obtain its own journal and QC evidence.
+The bridge never writes production completion entries or approves reviews.

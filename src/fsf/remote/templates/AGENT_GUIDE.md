@@ -60,7 +60,7 @@ declare its setup and output contract, and test it before approving its digest.
 
 This Python example prepares operator files only. Run it from a directory with
 the installed FSF package. Place an audited wheel built from the same source at
-`runtime/free_studio_flow-0.1.0rc8-py3-none-any.whl`. A released wheel lacking
+`runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl`. A released wheel lacking
 these modules cannot be used as a worker. Check the version of your build.
 
 ```python
@@ -96,7 +96,7 @@ production plan use the actual parent identities and digests; the opt-in remote
 executor supplies them directly from PlanExecutor.
 
 ```text
-fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc8-py3-none-any.whl --profile config/local.profile.json --out state
+fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl --profile config/local.profile.json --out state
 fsf remote diagnose --profile config/local.profile.json --probe
 ```
 
@@ -118,7 +118,7 @@ From a source checkout supporting `preflight`, use a worker wheel built from
 that same checkout:
 
 ```text
-fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc8-py3-none-any.whl --profile config/local.profile.json
+fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl --profile config/local.profile.json
 ```
 
 This read-only check validates declarations, authorization, QC contract digests
@@ -131,7 +131,9 @@ recipes also check their configured interpreter. SSH, HTTP and Kaggle connection
 checks do not prove installed tools, GPU capability or model inference; those
 runtime checks remain unverified. Setup/model/tool requirements are not installed
 or executed by this command. Without `--inputs` or `--wheel`, file readiness is
-also unverified. Existing Kaggle CPU-only and Blender CPU limits remain in force.
+also unverified. These legacy v1 commands retain their Kaggle CPU-only and
+Blender CPU limits. The versioned GPU/MODEL routes and trusted custom adapters
+are separate interfaces; this paragraph is not a framework-wide CPU restriction.
 
 Video outputs require `expected_media_contract` and its matching parent digest
 before preparation. A control video is a distinct declared role; it is not

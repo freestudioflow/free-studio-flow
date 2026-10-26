@@ -140,6 +140,7 @@ def compile_job(
     *,
     out_dir: str | Path | None = None,
     tool_name: str = "broll.library.ltx23.t2v",
+    media_contracts: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Intake a Word DOCX via Kernel profile and compile FSF job artifacts.
 
@@ -153,6 +154,21 @@ def compile_job(
     # Single source of truth: Kernel docx intake
     profile = profile_docx(path)
     manifest = compile_job_from_profile(profile)
+    if media_contracts is not None:
+        from fsf.conformance.media import validate_media_expected
+        from fsf.conformance.digest import canonical_contract_digest
+        import copy
+        shots={t['id']:t for t in manifest['tasks'] if is_shot_unit(t)}
+        if not isinstance(media_contracts,dict) or not media_contracts or set(media_contracts)-set(shots):
+            raise ValueError('Invalid operator media contracts')
+        for name,contract in media_contracts.items():
+            if not isinstance(contract,dict) or not {'containers','video_codecs','width','height','fps','duration_seconds','audio'} <= set(contract):
+                raise ValueError('Invalid operator media contract')
+            try:validate_media_expected(contract)
+            except Exception:raise ValueError('Invalid operator media contract') from None
+            shots[name]['expected_media_contract']=copy.deepcopy(contract)
+            shots[name]['expected_media_contract_source']='operator_configuration'
+        manifest['media_contracts_digest']=canonical_contract_digest(media_contracts)
     request = pdx_tool_request(manifest, tool=tool_name)
 
     # Validate against PDX Artifact Core contracts

@@ -1367,6 +1367,7 @@ class PlanExecutor:
                         "attempt_id": current_attempt,
                         "workorder_id": wo["workorder_id"],
                         "handoff_result": ingest_res,
+                        "execution_kind": "handoff",
                         "output_artifacts": [str(art_path)],
                     }
                     # Preserve verified consistency acknowledgement for journal

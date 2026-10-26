@@ -40,7 +40,10 @@ def submit(request,*,profile,store,state_root,store_config,adapter=None):
                     prior=read_json(path.parent/'request.json')
                     if prior['parent']['job_id']==request['parent']['job_id'] and prior['segment']['segment_id']==request['segment']['segment_id']:
                         raise RemoteError('REMOTE_PREVIOUS_SUBMISSION_UNKNOWN')
-            if profile['transport']=='kaggle' and request['policy']['gpu']:
+            # Native byte staging does not resolve worker-side storage secrets.
+            # Keep the saved-run secret proof for the separate secret-backed route.
+            native=store.profile.get('schema_version') in {'fsf_kaggle_native_store_v1','fsf_kaggle_native_store_v2'}
+            if profile['transport']=='kaggle' and request['policy']['gpu'] and not native:
                 evidence=root/'kaggle-cpu-ready.json'
                 if not evidence.exists():raise RemoteError('REMOTE_KAGGLE_SECRET_BINDING_UNVERIFIED')
                 smoke=read_json(evidence)

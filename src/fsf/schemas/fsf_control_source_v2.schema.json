@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_control_source_v2",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_control_source_v2"
+    },
+    "control_asset_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+    },
+    "origin": {
+      "const": "operator_control_video_import"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 68719476736
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 3840,
+      "multipleOf": 2
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 32,
+      "maximum": 3840,
+      "multipleOf": 2
+    },
+    "clock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "num": {
+              "const": 24
+            },
+            "den": {
+              "const": 1
+            }
+          },
+          "required": [
+            "num",
+            "den"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "num": {
+              "const": 24000
+            },
+            "den": {
+              "const": 1001
+            }
+          },
+          "required": [
+            "num",
+            "den"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 172800
+    },
+    "timestamps_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "decoded_frames_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "clay_profile": {
+      "const": "unverified"
+    },
+    "motion_review": {
+      "const": "not_reviewed"
+    },
+    "source_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "control_asset_id",
+    "origin",
+    "sha256",
+    "size_bytes",
+    "width",
+    "height",
+    "clock",
+    "frame_count",
+    "timestamps_digest",
+    "decoded_frames_digest",
+    "clay_profile",
+    "motion_review",
+    "source_digest"
+  ],
+  "additionalProperties": false
+}

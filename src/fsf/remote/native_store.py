@@ -15,10 +15,13 @@ from fsf.core.edit_store import edit_lock,read_json
 from fsf.remote.contracts import RemoteError,digest,sha,write_json,safe_path
 
 SCHEMA='fsf_kaggle_native_store_v1'
+SCHEMAS={SCHEMA,'fsf_kaggle_native_store_v2'}
 
 def validate(profile):
     from fsf.remote.artifacts import shape,_key
-    shape(profile,SCHEMA)
+    version=profile.get('schema_version')
+    if version not in SCHEMAS:raise RemoteError('REMOTE_ARTIFACT_SCHEMA')
+    shape(profile,version)
     if not profile['authorized']:raise RemoteError('REMOTE_STORE_FORBIDDEN')
     for prefix in profile['read_prefixes']+profile['write_prefixes']:
         if not prefix.endswith('/'):raise RemoteError('REMOTE_STORE_NAMESPACE')

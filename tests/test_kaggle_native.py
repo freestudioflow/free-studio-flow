@@ -16,6 +16,30 @@ def config(root):
         'read_prefixes':['jobs/'],'write_prefixes':['jobs/'],'max_artifact_bytes':64*1024*1024,
         'max_total_bytes':64*1024*1024,'deadline_seconds':300,'max_inline_notebook_bytes':1048576}
 
+
+def test_native_gpu_does_not_require_unrelated_secret_binding(native,monkeypatch):
+    from fsf.remote.v2_dispatch import submit
+    root,store,profile,old=native
+    monkeypatch.setenv('FSF_REMOTE_GPU','1')
+    recipe=copy.deepcopy(old['recipe'])
+    recipe['execution_requirements']['render'].update(device='gpu',backend='cuda',device_count=1,min_vram_mb=1)
+    recipe=seal(recipe,'recipe_digest')
+    profile.update(transport='kaggle',settings={'accelerator':'SYNTHETIC_AUTHORIZED_SHAPE'},approved_recipes=[recipe['recipe_digest']])
+    profile['policy']['gpu']=True
+    profile['gpu_limits']={'allowed':True,'backends':['cuda'],'max_devices':1,'max_vram_mb':24576}
+    definition={k:old[k] for k in ('parent','parameters','video_condition','consistency_requirements','expected_media_contract')}
+    definition['inputs']={}
+    request=prepare_request(definition,recipe,profile=profile,store=store,inputs={},wheel=old['worker_wheel'],segment=old['segment'],output=root/'prepared')
+    calls=[]
+    class Reached(Exception):pass
+    class Adapter:
+        def prepare(self,*args):
+            calls.append('native_prepare');raise Reached()
+        def submit(self,*args):pytest.fail('No provider submission permitted by this test')
+    with pytest.raises(Reached):
+        submit(request,profile=profile,store=store,state_root=root/'state',store_config='unused',adapter=Adapter())
+    assert calls==['native_prepare']
+
 @pytest.fixture
 def native(case,remote_wheel):
     root,_,_,profile,old=case
@@ -151,3 +175,51 @@ def test_existing_native_notebook_is_bound_to_exact_new_version(native,monkeypat
     assert call(value)['status']=='completed'
     saved.metadata.current_version_number=6
     with pytest.raises(RemoteError,match='REMOTE_KAGGLE_VERSION_AMBIGUOUS'):call(value)
+
+def test_oversize_native_input_uses_private_dataset(native,monkeypatch):
+    import base64,shutil
+    from fsf.remote.contracts import sha
+    from fsf.remote.kaggle_native import call,external_notebook,notebook,prepare
+    root,store,profile,request=native
+    profile=copy.deepcopy(profile);profile['transport']='kaggle'
+    profile['settings']={'accelerator':'NvidiaTeslaT4','owner_env':'SYNTHETIC_KAGGLE_OWNER'}
+    store.profile['max_inline_notebook_bytes']=1024
+    directory=root/'external';directory.mkdir()
+    with pytest.raises(RemoteError,match='REMOTE_KAGGLE_NATIVE_INPUT_TOO_LARGE'):prepare(request,store,directory)
+    bundle=directory/'native-input.zip'
+    slug='fsf-native-'+request['request_digest'][:20]
+    inline=len(json.dumps(notebook(request,bundle)).encode())
+    external=len(json.dumps(external_notebook(request,sha(bundle),slug)).encode())
+    assert external<inline
+    limit=inline-1
+    assert 1024<=limit<=1048576 and external<=limit
+    store.profile['max_inline_notebook_bytes']=limit
+    shutil.rmtree(directory);directory.mkdir()
+    store_path=root/'native.json';store_path.write_text(json.dumps(store.profile))
+    published={}
+    class API:
+        config_values={'username':'synthetic-owner'}
+        def authenticate(self):pass
+        def dataset_status(self,dataset,format=None):
+            if 'ref' not in published:raise RuntimeError('absent')
+            return 'ready'
+        def dataset_create_new(self,folder,public=False,quiet=True,convert_to_csv=True,dir_mode='skip',ignore_patterns=None):
+            assert public is False and convert_to_csv is False
+            metadata=json.loads((Path(folder)/'dataset-metadata.json').read_text())
+            assert metadata['licenses']==[{'name':'other'}]
+            assert 'retains its existing ownership and license' in metadata['description']
+            published['ref']=True;published['folder']=folder
+            return SimpleNamespace(error=None)
+        def dataset_metadata(self,dataset,path):
+            Path(path).mkdir(parents=True,exist_ok=True)
+            (Path(path)/'dataset-metadata.json').write_text(json.dumps({'isPrivate':True}),encoding='utf-8')
+    monkeypatch.setitem(sys.modules,'kaggle.api.kaggle_api_extended',SimpleNamespace(KaggleApi=API))
+    monkeypatch.setenv('SYNTHETIC_KAGGLE_OWNER','synthetic-owner')
+    value={'operation':'prepare','request':request,'profile':profile,'directory':str(directory),'store_config':str(store_path)}
+    assert call(value)['data_plane']=='kaggle_native_v1'
+    text=(directory/'worker.ipynb').read_text(encoding='utf-8')
+    assert base64.b64encode(bundle.read_bytes()).decode()[:80] not in text
+    assert '/kaggle/input/'+slug in text and 'import base64' in text and 'synthetic-owner' not in text
+    meta=json.loads((directory/'kernel-metadata.json').read_text(encoding='utf-8'))
+    assert meta['dataset_sources']==['synthetic-owner/'+slug] and meta['is_private'] is True
+    assert published['folder']

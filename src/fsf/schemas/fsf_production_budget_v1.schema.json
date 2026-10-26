@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_production_budget_v1",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_production_budget_v1"
+    },
+    "production_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "unit_scale": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000000
+    },
+    "authorized": {
+      "type": "boolean"
+    },
+    "total_units": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "cleanup_units": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "fixed_delivery_units": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "route_limits": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9223372036854775807
+      },
+      "minProperties": 1
+    },
+    "max_generated_frames": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "authorization_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "logical_shot_ids": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "production_id",
+    "currency",
+    "unit_scale",
+    "authorized",
+    "total_units",
+    "cleanup_units",
+    "fixed_delivery_units",
+    "route_limits",
+    "max_generated_frames",
+    "authorization_digest",
+    "logical_shot_ids"
+  ],
+  "additionalProperties": false
+}

@@ -54,7 +54,14 @@ try:
         remaining=DEADLINE-(time.monotonic()-started)
         if remaining<=0:raise TimeoutError()
         value=safety_module.run_safe_subprocess(args,cwd=root,env=env,inherit_env=False,timeout_seconds=remaining,output_limit_bytes=1024*1024)
-        if value.timed_out or value.returncode:raise RuntimeError('REMOTE_NATIVE_BOOTSTRAP_FAILED')
+        if value.timed_out or value.returncode:
+            known={'REMOTE_ENVIRONMENT_MISMATCH','REMOTE_STALE_WHEEL','REMOTE_WORKER_VERSION',
+                   'REMOTE_WORKER_FAILED','REMOTE_MODEL_EVIDENCE','REMOTE_MODEL_INTEGRITY',
+                   'REMOTE_GPU_DEVICE_MISMATCH','REMOTE_COMMAND_FAILED'}
+            codes=[code for code in sorted(known) if code in value.stderr or code in value.stdout]
+            print(json.dumps({'native_phase':phase,'returncode':value.returncode,
+                              'timed_out':value.timed_out,'error_codes':codes}))
+            raise RuntimeError('REMOTE_NATIVE_BOOTSTRAP_FAILED')
     phase='worker_environment';venv=root/'venv';run([sys.executable,'-m','venv','--without-pip',str(venv)])
     python=venv/'bin/python'
     phase='worker_installation'
