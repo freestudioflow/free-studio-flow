@@ -19,6 +19,45 @@ def controlled_admission_clock(monkeypatch, clock):
     monkeypatch.setattr('fsf.production.command_driver._processing_time',lambda:clock[0])
 
 
+@pytest.mark.parametrize('renew', [False, True])
+@pytest.mark.parametrize('wall', [100.0, 100.9999])
+def test_prepared_lease_keeps_requested_second_across_wall_boundary(tmp_path, monkeypatch, renew, wall):
+    plan, store = store_case(tmp_path, 'v1')
+    clock = [wall]
+    monkeypatch.setattr('fsf.production.store.time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic, sleep=time.sleep))
+    try:
+        task = plan['tasks'][0]
+        attempt = store.claim(store.execution(plan), task['task_id'], owner='parent', seconds=1)
+        if renew:
+            clock[0] += 10
+            store.renew_prepared(attempt['request'], attempt['epoch'], owner='parent', seconds=1)
+        started = clock[0]
+        expires = store.attempt(attempt['request'])['expires']
+        assert 1 <= expires - started < 2
+        clock[0] = started + 0.0002
+        store.mark_sending(attempt['request'], attempt['epoch'])
+        assert store.attempt(attempt['request'])['status'] == 'submitted'
+        assert store.check()['reservations'] == 1
+    finally:
+        store.close()
+
+
+def test_prepared_lease_still_rejects_at_actual_expiration(tmp_path, monkeypatch):
+    plan, store = store_case(tmp_path, 'v1')
+    clock = [100.9999]
+    monkeypatch.setattr('fsf.production.store.time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic, sleep=time.sleep))
+    try:
+        task = plan['tasks'][0]
+        attempt = store.claim(store.execution(plan), task['task_id'], owner='parent', seconds=1)
+        clock[0] = store.attempt(attempt['request'])['expires']
+        with pytest.raises(ProductionError, match='PRODUCTION_LEASE_EXPIRED'):
+            store.mark_sending(attempt['request'], attempt['epoch'])
+        assert store.attempt(attempt['request'])['status'] == 'reserved'
+        assert store.check()['reservations'] == 1
+    finally:
+        store.close()
+
+
 def test_admission_survives_intent_commit_but_new_calls_stop_at_boundary(tmp_path, monkeypatch):
     plan,store=store_case(tmp_path,'v1')
     backend,_=driver(tmp_path,plan)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import math
 import os
 from pathlib import Path
 import sqlite3
@@ -500,7 +501,7 @@ class ProductionStore:
                     raise ProductionError('PRODUCTION_FORECAST_UNAFFORDABLE')
             epoch = row['epoch'] + 1
             request = digest([self.descriptor['store_uuid'], execution, task_id, epoch])
-            expires = int(time.time()) + seconds
+            expires = math.ceil(time.time() + seconds)
             self.db.execute('INSERT INTO attempts(request,execution,task,epoch,owner,expires,status) VALUES(?,?,?,?,?,?,?)',
                             (request, execution, task_id, epoch, owner, expires, 'reserved'))
             slot = (task['logical_shot_id'], task['segment_id'], round_value) if frames else (None, None, None)
@@ -551,7 +552,7 @@ class ProductionStore:
             state = self.db.execute('SELECT state FROM outbox WHERE request=?', (request,)).fetchone()[0]
             if prior['owner'] != owner or state != 'prepared':
                 raise ProductionError('PRODUCTION_RECONCILE_REQUIRED')
-            self.db.execute('UPDATE attempts SET expires=? WHERE request=?', (int(time.time()) + seconds, request))
+            self.db.execute('UPDATE attempts SET expires=? WHERE request=?', (math.ceil(time.time() + seconds), request))
             self._event('prepared_lease_renewed', prior['execution'], prior['task'], request)
 
     def cancel_intent(self, request, epoch):
