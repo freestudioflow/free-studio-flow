@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import json
 import re
+import copy
+from contextlib import contextmanager
 
 from fsf.core.edit_store import read_json
 from fsf.executors.subprocess_safety import run_safe_subprocess
@@ -35,19 +37,62 @@ class CommandAdapter:
         self.profile = profile
         self.settings = validate_settings(profile['settings'])
         self.store_config = str(Path(store_config).absolute())
+        self._pins = None
+        self._pinned_files = None
+        self._pinned_settings = None
 
-    def call(self, operation, request, locator, directory, remote=None):
+    @contextmanager
+    def pinned_files(self):
+        """A bounded native read lease; unsupported layouts retain full hashing."""
+        from fsf.core.file_pins import WindowsReadSet
+        if self._pins is not None:
+            raise RemoteError('REMOTE_ADAPTER_CONFIG')
+        pins = None
+        if os.name == 'nt':
+            try:
+                pins = WindowsReadSet()
+                for item in self.settings['files']:
+                    if pins.hash(item['path']) != item['sha256']:
+                        raise RemoteError('REMOTE_ADAPTER_CHANGED')
+                self._pins = pins
+                self._pinned_files = [dict(item) for item in self.settings['files']]
+                self._pinned_settings = copy.deepcopy(self.settings)
+            except OSError:
+                if pins is not None:pins.close()
+                pins = None
+            except BaseException:
+                if pins is not None:pins.close()
+                self._pins,self._pinned_files,self._pinned_settings = None,None,None
+                raise
+        try:
+            yield pins
+        finally:
+            self._pins,self._pinned_files = None,None
+            self._pinned_settings = None
+            if pins is not None:pins.close()
+
+    def call(self, operation, request, locator, directory, remote=None, *, timeout_seconds=None):
+        import math
+        timeout = self.settings['timeout_seconds']
+        if timeout_seconds is not None:
+            if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+                raise RemoteError('REMOTE_ADAPTER_TIMEOUT')
+            timeout = min(timeout, timeout_seconds)
         directory = Path(directory)
+        if self._pins is not None and self.settings != self._pinned_settings:
+            raise RemoteError('REMOTE_ADAPTER_CHANGED')
         if operation == 'submit':
             from fsf.remote.dispatch_hold import refuse_held_submit
             refuse_held_submit(directory)
-        for item in self.settings['files']:
+        for item in ([] if self._pins is not None and self.settings['files']==self._pinned_files else self.settings['files']):
             path = Path(item['path'])
             # Virtualenv Python is commonly a symlink on POSIX. Pin the bytes
             # reached by the configured path, rather than banning that layout.
             if not path.is_file() or sha(path) != item['sha256']:
                 raise RemoteError('REMOTE_ADAPTER_CHANGED')
         directory.mkdir(parents=True, exist_ok=True)
+        if self._pins is not None:
+            self._pins.hold_directory(directory)
         source = directory / ('adapter-' + operation + '-request.json')
         target = directory / ('adapter-' + operation + '-response.json')
         target.unlink(missing_ok=True)
@@ -59,7 +104,12 @@ class CommandAdapter:
             env[name] = os.environ[name]
         result = run_safe_subprocess([*self.settings['command'],str(source),str(target)],
             cwd=self.settings['cwd'], env=env, inherit_env=False,
-            timeout_seconds=self.settings['timeout_seconds'], output_limit_bytes=16384)
+            timeout_seconds=timeout, output_limit_bytes=16384)
+        if result.timed_out or result.returncode or not target.is_file() or target.is_symlink():
+            write_json(directory/('adapter-'+operation+'-failure.json'),{
+                'schema_version':'fsf_command_adapter_failure_v1','request_digest':request['request_digest'],
+                'operation':operation,'returncode':result.returncode,'timed_out':result.timed_out,
+                'stdout':result.stdout,'stderr':result.stderr})
         if result.timed_out:raise RemoteError('REMOTE_ADAPTER_TIMEOUT')
         if result.returncode or not target.is_file() or target.is_symlink():raise RemoteError('REMOTE_ADAPTER_FAILED')
         secrets=[env[n] for n in self.settings['credential_env_names']]
@@ -69,7 +119,7 @@ class CommandAdapter:
             target.unlink(missing_ok=True)
             raise
         try:
-            value = read_json(target)
+            value = self._pins.read_json_once(target) if self._pins is not None else read_json(target)
             decoded=json.dumps(value,ensure_ascii=False)
             if any(len(secret)>=4 and secret in decoded for secret in secrets):
                 target.unlink(missing_ok=True)

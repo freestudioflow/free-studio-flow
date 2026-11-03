@@ -60,7 +60,7 @@ declare its setup and output contract, and test it before approving its digest.
 
 This Python example prepares operator files only. Run it from a directory with
 the installed FSF package. Place an audited wheel built from the same source at
-`runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl`. A released wheel lacking
+`runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl`. A released wheel lacking
 these modules cannot be used as a worker. Check the version of your build.
 
 ```python
@@ -96,7 +96,7 @@ production plan use the actual parent identities and digests; the opt-in remote
 executor supplies them directly from PlanExecutor.
 
 ```text
-fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl --profile config/local.profile.json --out state
+fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl --profile config/local.profile.json --out state
 fsf remote diagnose --profile config/local.profile.json --probe
 ```
 
@@ -118,7 +118,7 @@ From a source checkout supporting `preflight`, use a worker wheel built from
 that same checkout:
 
 ```text
-fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc9-py3-none-any.whl --profile config/local.profile.json
+fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl --profile config/local.profile.json
 ```
 
 This read-only check validates declarations, authorization, QC contract digests

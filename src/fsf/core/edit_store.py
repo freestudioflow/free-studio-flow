@@ -6,6 +6,7 @@ programs are outside the guarantee. Atomic visibility is not power-loss durabili
 from __future__ import annotations
 
 from contextlib import contextmanager
+from functools import lru_cache
 import copy
 import errno
 import json
@@ -104,6 +105,27 @@ def _regular(path: Path, *, missing=False):
         raise EditStoreError("EDIT_IO")
 
 
+@lru_cache(maxsize=1)
+def _windows_attribute_api():
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    function = kernel.GetFileAttributesW
+    function.argtypes = [wintypes.LPCWSTR]
+    function.restype = wintypes.DWORD
+    return function
+
+
+def _windows_attributes(path):
+    """Fresh reparse attributes, without collecting full size/time metadata."""
+    import ctypes
+    from fsf.core.filesystem import native_path
+    value = _windows_attribute_api()(native_path(path))
+    if value == 0xffffffff:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return value
+
+
 def _target(path) -> Path:
     """Normalize aliases without silently traversing symlinks or reparse points."""
     try:
@@ -112,10 +134,14 @@ def _target(path) -> Path:
         lexical = Path(path).absolute()
         for parent in reversed((lexical, *lexical.parents)):
             try:
-                info = parent.lstat()
+                if os.name == 'nt':
+                    reparse = bool(_windows_attributes(parent) & 0x400)
+                else:
+                    info = parent.lstat()
+                    reparse = stat.S_ISLNK(info.st_mode) or bool(getattr(info,'st_file_attributes',0)&0x400)
             except FileNotFoundError:
                 continue
-            if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            if reparse:
                 raise EditStoreError("EDIT_IO")
         if not raw.parent.is_dir():
             raise EditStoreError("EDIT_IO")
@@ -125,28 +151,35 @@ def _target(path) -> Path:
         raise EditStoreError("EDIT_IO") from None
 
 
-def _open_reader(target):
-    if os.name != "nt":
-        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        return os.fdopen(fd, "rb")
-    # Python's ordinary open lacks FILE_SHARE_DELETE, blocking concurrent replace.
+@lru_cache(maxsize=1)
+def _windows_reader_api():
+    """Cache function bindings, never filesystem identities or file contents."""
     import ctypes
     from ctypes import wintypes
-    import msvcrt
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     create = kernel.CreateFileW
     create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
                        wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
     create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    return create, close, wintypes.HANDLE(-1).value
+
+
+def _open_reader(target):
+    if os.name != "nt":
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        return os.fdopen(fd, "rb")
+    # Python's ordinary open lacks FILE_SHARE_DELETE, blocking concurrent replace.
+    import msvcrt
+    create, close, invalid = _windows_reader_api()
     handle = create(str(target), 0x80000000, 0x1 | 0x2 | 0x4, None, 3, 0x00200000, None)
-    if handle == wintypes.HANDLE(-1).value:
+    if handle == invalid:
         raise OSError("Reader open failed")
     try:
         fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
     except BaseException:
-        close = kernel.CloseHandle
-        close.argtypes = [wintypes.HANDLE]
-        close.restype = wintypes.BOOL
         close(handle)
         raise
     return os.fdopen(fd, "rb")

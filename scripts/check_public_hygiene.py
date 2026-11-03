@@ -32,6 +32,7 @@ PUBLIC_FILES = {
     "compatibility/pdx_official_pin_rc7_a8_a3.json",
     "docs/DATA_GOVERNANCE.md",
     "docs/FSF_LIVE_VERIFY.md",
+    "docs/PRODUCTION_WORKFLOWS.md",
     "docs/REMOTE_DATA_PLANE.md",
     "docs/RELEASE.md",
     "fsf-executors.example.json",

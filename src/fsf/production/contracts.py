@@ -22,6 +22,14 @@ class ProductionError(ValueError):
         super().__init__(code)
 
 
+def assert_live_path(path):
+    """Cooperative retirement guard; older binaries do not understand this marker."""
+    path = Path(path)
+    marker = path.with_name(path.name + '.retired.json')
+    if marker.exists() or marker.is_symlink():
+        raise ProductionError('PRODUCTION_AUTHORITY_CONFLICT')
+
+
 def key(value):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", value):
         raise ProductionError("PRODUCTION_ID_INVALID")

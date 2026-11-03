@@ -15,6 +15,8 @@ class Ledger:
         self.path = path
 
     def create(self, authorization):
+        from fsf.production.contracts import assert_live_path
+        assert_live_path(self.path)
         auth = self._authorization(authorization)
         minimum = max((auth["total_units"]+9)//10, auth["fixed_delivery_units"])
         if auth["cleanup_units"] < minimum or sum(auth["route_limits"].values()) > auth["total_units"]:
@@ -246,5 +248,7 @@ class Ledger:
 
     @staticmethod
     def _save(path,state):
+        from fsf.production.contracts import assert_live_path
+        assert_live_path(path)
         state["revision"] += 1
         publish(path,seal(state,"ledger_digest"))

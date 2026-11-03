@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_gaming_delivery_profile_v1",
+  "description": "Versioned static asset delivery profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "fsf_gaming_delivery_profile_v1"
+    },
+    "profile_id": {
+      "const": "godot-static-room-v1"
+    },
+    "engine_version": {
+      "const": "4.5.1-stable"
+    },
+    "validator_version": {
+      "const": "2.0.0-dev.3.10"
+    },
+    "asset_format": {
+      "const": "glTF-2.0-GLB"
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "package_bytes_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "glb_bytes_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "nodes_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "triangles_total_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "triangles_prop_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "materials_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "texture_edge_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "images_bytes_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "required": [
+        "package_bytes_max",
+        "glb_bytes_max",
+        "nodes_max",
+        "triangles_total_max",
+        "triangles_prop_max",
+        "materials_max",
+        "texture_edge_max",
+        "images_bytes_max"
+      ]
+    },
+    "required_extensions": {
+      "const": []
+    },
+    "collision_modes": {
+      "const": [
+        "none",
+        "convex",
+        "static_trimesh"
+      ]
+    },
+    "tool_deadline_seconds": {
+      "const": 120
+    },
+    "harness_deadline_seconds": {
+      "const": 300
+    },
+    "tool_rss_bytes_max": {
+      "const": 2147483648
+    },
+    "bounds_tolerance_m": {
+      "const": 0.0001
+    },
+    "collision_tolerance_m": {
+      "const": 0.001
+    },
+    "material_tolerance": {
+      "const": 0.0001
+    },
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile_id",
+    "engine_version",
+    "validator_version",
+    "asset_format",
+    "budgets",
+    "required_extensions",
+    "collision_modes",
+    "tool_deadline_seconds",
+    "harness_deadline_seconds",
+    "tool_rss_bytes_max",
+    "bounds_tolerance_m",
+    "collision_tolerance_m",
+    "material_tolerance",
+    "profile_digest"
+  ]
+}

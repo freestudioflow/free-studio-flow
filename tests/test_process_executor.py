@@ -553,6 +553,128 @@ def test_process_cleanup_error_raised_if_child_remains_alive(monkeypatch: pytest
     with pytest.raises(ProcessCleanupError, match="still alive"):
         terminate_process_tree(99999, grace_period_sec=0.05, raise_on_failure=True)
 
-    # In run_safe_subprocess, final barrier checks _is_process_alive and raises ProcessCleanupError
+    # Exercise the fallback barrier, rather than overriding the stronger native
+    # job accounting with an unrelated PID liveness observation.
+    monkeypatch.setattr(safe_mod, "_create_windows_job_object", lambda: None)
     with pytest.raises(ProcessCleanupError, match="Process cleanup failed"):
         run_safe_subprocess([sys.executable, "-c", "import sys; sys.exit(0)"])
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows job accounting')
+def test_owned_job_completion_does_not_enumerate_unrelated_system_processes(monkeypatch):
+    import fsf.executors.subprocess_safety as safe
+    assigned=[]
+    original=safe._start_owned_process
+    def start(job,args,kwargs):
+        process=original(job,args,kwargs);assigned.append(process._fsf_prebound);return process
+    monkeypatch.setattr(safe,'_start_owned_process',start)
+    def forbidden(_):raise AssertionError('Owned job must not scan global process IDs')
+    monkeypatch.setattr(safe,'_list_windows_descendants',forbidden)
+    result=safe.run_safe_subprocess([sys.executable,'-c','print("job complete")'], output_limit_bytes=1024)
+    assert assigned==[True] and result.returncode==0 and 'job complete' in result.stdout
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows descendant ownership')
+def test_owned_job_reclaims_descendant_after_root_exits(tmp_path,monkeypatch):
+    import fsf.executors.subprocess_safety as safe
+    gate=tmp_path/'go';pidfile=tmp_path/'child.pid'
+    script=tmp_path/'root.py'
+    script.write_text('''import subprocess,sys,time
+from pathlib import Path
+gate,pidfile=map(Path,sys.argv[1:]);deadline=time.monotonic()+5
+while not gate.exists():
+ if time.monotonic()>deadline:raise SystemExit(4)
+ time.sleep(.01)
+child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],
+ stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+pidfile.write_text(str(child.pid))
+''')
+    assigned=[];original=safe._start_owned_process
+    def start(job,args,kwargs):
+        process=original(job,args,kwargs);assigned.append(process._fsf_prebound);return process
+    monkeypatch.setattr(safe,'_start_owned_process',start)
+    def forbidden(_):raise AssertionError('Descendant belongs to the owned job')
+    monkeypatch.setattr(safe,'_list_windows_descendants',forbidden)
+    result=safe.run_safe_subprocess([sys.executable,str(script),str(gate),str(pidfile)],
+        process_started=lambda _:gate.write_text('assigned'),timeout_seconds=10,output_limit_bytes=1024)
+    assert assigned==[True] and result.returncode==0 and pidfile.is_file()
+    assert not safe._is_process_alive(int(pidfile.read_text()))
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows job accounting fallback')
+def test_unavailable_job_accounting_retains_global_cleanup_barrier(monkeypatch):
+    import fsf.executors.subprocess_safety as safe
+    calls=[];original=safe._list_windows_descendants
+    def enumerate_tree(pid):calls.append(pid);return original(pid)
+    def unavailable(_):raise OSError('Injected accounting failure')
+    monkeypatch.setattr(safe,'_windows_job_active',unavailable)
+    monkeypatch.setattr(safe,'_list_windows_descendants',enumerate_tree)
+    result=safe.run_safe_subprocess([sys.executable,'-c','print("fallback complete")'],output_limit_bytes=1024)
+    assert result.returncode==0 and calls
+
+
+def test_owned_job_with_persisting_active_processes_is_not_reported_reclaimed(monkeypatch):
+    import fsf.executors.subprocess_safety as safe
+    class Kernel:
+        def TerminateJobObject(self,job,code):return True
+    monkeypatch.setattr(safe,'_windows_job_active',lambda _:1)
+    monkeypatch.setattr(safe,'_windows_job_api',lambda:(Kernel(),None))
+    with pytest.raises(safe.ProcessCleanupError,match='still has active processes'):
+        safe._reclaim_windows_job(123,timeout=0)
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Suspended Windows creation')
+def test_failed_prestart_assignment_never_executes_application(tmp_path,monkeypatch):
+    import fsf.executors.subprocess_safety as safe
+    kernel,_=safe._windows_job_api()
+    monkeypatch.setattr(kernel,'UpdateProcThreadAttribute',lambda *_:False)
+    marker=tmp_path/'must-not-exist'
+    with pytest.raises(OSError,match='bind process creation'):
+        safe.run_safe_subprocess([sys.executable,'-c',
+            'from pathlib import Path;import sys;Path(sys.argv[1]).write_text("ran")',str(marker)])
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Concurrent native job launch')
+def test_immediate_children_are_owned_in_concurrent_launches(tmp_path,monkeypatch):
+    import concurrent.futures
+    import fsf.executors.subprocess_safety as safe
+    original=subprocess.Popen._execute_child
+    def forbidden(_):raise AssertionError('No global process enumeration on owned completion')
+    monkeypatch.setattr(safe,'_list_windows_descendants',forbidden)
+    code=('import subprocess,sys;from pathlib import Path;'
+          'p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"],'
+          'stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);'
+          'Path(sys.argv[1]).write_text(str(p.pid))')
+    def launch(index):
+        marker=tmp_path/f'child-{index}.pid'
+        result=safe.run_safe_subprocess([sys.executable,'-c',code,str(marker)],
+            timeout_seconds=10,output_limit_bytes=1024)
+        assert result.returncode==0 and marker.is_file()
+        assert not safe._is_process_alive(int(marker.read_text()))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(launch,range(4)))
+    assert subprocess.Popen._execute_child is original
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows launch parity')
+def test_owned_launch_preserves_unicode_environment_and_cwd(tmp_path):
+    from fsf.executors.subprocess_safety import run_safe_subprocess
+    folder=tmp_path/'space directory';folder.mkdir()
+    result=run_safe_subprocess([sys.executable,'-c',
+        'import os;from pathlib import Path;assert os.environ["PROBE_VALUE"]=="\\u03a9";Path("ok").write_text("yes")'],
+        cwd=folder,env={'PROBE_VALUE':'\u03a9'},timeout_seconds=10)
+    assert result.returncode==0 and (folder/'ok').read_text()=='yes'
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows input validation')
+@pytest.mark.parametrize('target',['command','environment'])
+def test_owned_launch_rejects_embedded_null_before_execution(tmp_path,target):
+    from fsf.executors.subprocess_safety import run_safe_subprocess
+    marker=tmp_path/'must-not-run'
+    args=[sys.executable,'-c','from pathlib import Path;import sys;Path(sys.argv[1]).write_text("bad")',str(marker)]
+    env={}
+    if target=='command':args.append('bad\0argument')
+    else:env['PROBE_VALUE']='bad\0value'
+    with pytest.raises(ValueError):run_safe_subprocess(args,env=env)
+    assert not marker.exists()

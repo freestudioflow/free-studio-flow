@@ -20,6 +20,27 @@ from fsf.production.contracts import ProductionError, digest, key, publish, seal
 MAX_BYTES = 64 * 1024**3
 
 
+class ArtifactObservation:
+    """One fresh content read, consumable only by the requesting verification.
+
+    A private nonce prevents an earlier sweep's observation from being reused.
+    This is a bounded observation, not a signature or an immutable filesystem.
+    """
+    __slots__ = ('_path','_identity','_challenge','_used')
+
+    def __init__(self, path, challenge):
+        self._path = Path(path).absolute()
+        self._identity = file_identity(self._path)
+        self._challenge = challenge
+        self._used = False
+
+    def consume(self, path, challenge):
+        if self._used or self._challenge is not challenge or self._path != Path(path).absolute():
+            raise ProductionError('PRODUCTION_OBSERVATION_INVALID')
+        self._used = True
+        return dict(self._identity)
+
+
 def file_identity(path, limit=MAX_BYTES):
     path = Path(path).absolute()
     _no_links(path)

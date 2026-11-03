@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_production_store_manifest_v1",
+  "description": "Versioned operator-controlled production authority contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "fsf_production_store_manifest_v1"
+    },
+    "store_uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "store_format": {
+      "const": "fsf_production_store_v1"
+    },
+    "database": {
+      "const": "state.sqlite3"
+    },
+    "sqlite_profile": {
+      "const": "delete_full_v1"
+    },
+    "authorization_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "activation_state": {
+      "const": "active"
+    },
+    "authority_epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "migration_receipt_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "store_uuid",
+    "store_format",
+    "database",
+    "sqlite_profile",
+    "authorization_digest",
+    "activation_state",
+    "authority_epoch",
+    "migration_receipt_digest",
+    "manifest_digest"
+  ]
+}

@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from fsf.conformance.digest import canonical_contract_digest
 from fsf.core.consistency import canonical_asset_digest
 from fsf.core.edit_store import _open_reader as _windows_reader
+from fsf.core.edit_store import _windows_attributes
 
 KINDS = frozenset({"unspecified", "character", "scene", "prop", "style", "audio", "animation"})
 ROLE_MEDIA_TYPES = {
@@ -76,8 +77,12 @@ def _path_parts(value):
 
 def _no_links(path):
     for component in reversed((path, *path.parents)):
-        info = component.lstat()
-        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+        if os.name == 'nt':
+            reparse = bool(_windows_attributes(component) & 0x400)
+        else:
+            info = component.lstat()
+            reparse = stat.S_ISLNK(info.st_mode) or bool(getattr(info,'st_file_attributes',0)&0x400)
+        if reparse:
             raise AssetValidationError("ASSET_PATH")
 
 

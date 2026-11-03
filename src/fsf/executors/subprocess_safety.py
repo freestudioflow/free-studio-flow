@@ -19,8 +19,11 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Sequence
+
+_STDLIB_POPEN = subprocess.Popen
 
 def scrub_string_secrets(text: str) -> str:
     """Scrub tokens, API keys, and sensitive paths from raw strings."""
@@ -85,6 +88,8 @@ def sanitize_process_text(
         return [sanitize_process_text(x, env=env, extra_tokens=extra_tokens) for x in text]
 
     out = str(text)
+    if not out:
+        return out
     vals_to_redact: set[str] = set()
 
     # Collect from active environments (both os.environ and passed env)
@@ -263,13 +268,177 @@ def _force_kill_windows_pid(pid: int) -> None:
         pass
 
 
+@lru_cache(maxsize=1)
+def _windows_job_api():
+    """Bind pointer-width APIs once; never cache a process or job observation."""
+    import ctypes
+    from ctypes import wintypes as w
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateJobObjectW.argtypes = [w.LPVOID, w.LPCWSTR]
+    kernel.CreateJobObjectW.restype = w.HANDLE
+    kernel.SetInformationJobObject.argtypes = [w.HANDLE, w.DWORD, w.LPVOID, w.DWORD]
+    kernel.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+    kernel.OpenProcess.restype = w.HANDLE
+    kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
+    kernel.TerminateJobObject.argtypes = [w.HANDLE, w.UINT]
+    kernel.CloseHandle.argtypes = [w.HANDLE]
+    kernel.QueryInformationJobObject.argtypes = [w.HANDLE, w.DWORD, w.LPVOID, w.DWORD, w.LPVOID]
+    kernel.ResumeThread.argtypes = [w.HANDLE]
+    kernel.ResumeThread.restype = w.DWORD
+    kernel.TerminateProcess.argtypes = [w.HANDLE, w.UINT]
+    kernel.WaitForSingleObject.argtypes = [w.HANDLE, w.DWORD]
+    class Accounting(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_int64) for name in
+                    ('user', 'kernel', 'period_user', 'period_kernel')] + [
+                        (name, w.DWORD) for name in ('faults', 'total', 'active', 'terminated')]
+    return kernel, Accounting
+
+
+@lru_cache(maxsize=1)
+def _windows_creation_layout():
+    import ctypes as c
+    from ctypes import wintypes as w
+    class Startup(c.Structure):
+        _fields_ = [('cb',w.DWORD),('reserved',w.LPWSTR),('desktop',w.LPWSTR),('title',w.LPWSTR)] + [
+            (name,w.DWORD) for name in ('x','y','width','height','columns','rows','fill','dwFlags')] + [
+            ('wShowWindow',w.WORD),('reserved_size',w.WORD),('reserved_bytes',w.LPVOID),
+            ('hStdInput',w.HANDLE),('hStdOutput',w.HANDLE),('hStdError',w.HANDLE)]
+    class Extended(c.Structure):
+        _fields_ = [('startup',Startup),('attributes',w.LPVOID)]
+    class Process(c.Structure):
+        _fields_ = [('process',w.HANDLE),('thread',w.HANDLE),('pid',w.DWORD),('tid',w.DWORD)]
+    return Extended,Process
+
+
+def _create_prebound_windows_process(job, values):
+    """CreateProcessW JOB_LIST binds ownership at creation, before any code runs."""
+    import ctypes as c
+    from ctypes import wintypes as w
+    application, command, ps, ts, inherit, flags, env, cwd, startup = values
+    if ps is not None or ts is not None:raise OSError('Unsupported security attributes')
+    if any(value is not None and '\0' in value for value in (application,command,cwd)):
+        raise ValueError('Embedded null in process arguments')
+    if env is not None:
+        for name,value in env.items():
+            if not isinstance(name,str) or not isinstance(value,str):raise TypeError('Environment must contain strings')
+            if not name or '\0' in name or '\0' in value or '=' in name[1:]:
+                raise ValueError('Invalid environment entry')
+    Extended,Process=_windows_creation_layout()
+    kernel,_=_windows_job_api()
+    initialize=kernel.InitializeProcThreadAttributeList
+    initialize.argtypes=[w.LPVOID,w.DWORD,w.DWORD,c.POINTER(c.c_size_t)]
+    update=kernel.UpdateProcThreadAttribute
+    update.argtypes=[w.LPVOID,w.DWORD,c.c_size_t,w.LPVOID,c.c_size_t,w.LPVOID,w.LPVOID]
+    delete=kernel.DeleteProcThreadAttributeList;delete.argtypes=[w.LPVOID]
+    create=kernel.CreateProcessW
+    create.argtypes=[w.LPCWSTR,w.LPWSTR,w.LPVOID,w.LPVOID,w.BOOL,w.DWORD,w.LPVOID,w.LPCWSTR,
+                     w.LPVOID,w.LPVOID]
+    attributes=startup.lpAttributeList or {}
+    if set(attributes)-{'handle_list'}:raise OSError('Unsupported startup attributes')
+    handles=attributes.get('handle_list',[])
+    count=1+bool(handles);size=c.c_size_t()
+    initialize(None,count,0,c.byref(size))
+    memory=c.create_string_buffer(size.value)
+    if not initialize(memory,count,0,c.byref(size)):raise OSError('Cannot initialize startup attributes')
+    try:
+        jobs=(w.HANDLE*1)(job)
+        if not update(memory,0,0x0002000D,jobs,c.sizeof(jobs),None,None):
+            raise OSError('Cannot bind process creation to owned job')
+        if handles:
+            inherited=(w.HANDLE*len(handles))(*handles)
+            if not update(memory,0,0x00020002,inherited,c.sizeof(inherited),None,None):
+                raise OSError('Cannot bind inherited handles')
+        info=Extended();info.startup.cb=c.sizeof(Extended);info.attributes=c.cast(memory,w.LPVOID)
+        for field in ('dwFlags','wShowWindow','hStdInput','hStdOutput','hStdError'):
+            setattr(info.startup,field,getattr(startup,field))
+        environment=None
+        if env is not None:
+            environment=c.create_unicode_buffer(''.join(k+'='+v+'\0' for k,v in sorted(env.items(),key=lambda p:p[0].upper()))+'\0')
+        arguments=c.create_unicode_buffer(command);result=Process()
+        if not create(application,arguments,None,None,inherit,flags|0x00080000|0x00000400|0x4,
+                      environment,cwd,c.byref(info),c.byref(result)):
+            raise c.WinError(c.get_last_error())
+        return result.process,result.thread,result.pid,result.tid
+    finally:delete(memory)
+
+
+class _JobPopen(_STDLIB_POPEN):
+    """Per-launch stdlib bridge; no mutation of subprocess or _winapi globals."""
+    def __init__(self, *args, job_handle, **kwargs):
+        self._fsf_job = job_handle
+        self._fsf_prebound = False
+        super().__init__(*args, **kwargs)
+
+    def _execute_child(self, *args, **kwargs):
+        import types
+        original = _STDLIB_POPEN._execute_child
+        api = original.__globals__.get('_winapi')
+        if api is None or 'CreateProcess' not in original.__code__.co_names:
+            raise OSError('Unsupported Windows launch implementation')
+        owner = self
+        class LaunchAPI:
+            def __getattr__(self, name):return getattr(api, name)
+            def CreateProcess(self, *values):
+                if len(values) != 9:
+                    raise OSError('Unsupported Windows launch signature')
+                values = list(values)
+                values[5] |= 0x4  # CREATE_SUSPENDED: no application code yet.
+                hp, ht, pid, tid = _create_prebound_windows_process(owner._fsf_job, values)
+                kernel, _ = _windows_job_api()
+                try:
+                    if kernel.ResumeThread(ht) != 1:
+                        raise OSError('Cannot resume owned process')
+                    owner._fsf_prebound = True
+                    return hp, ht, pid, tid
+                except BaseException:
+                    kernel.TerminateProcess(hp, 1)
+                    kernel.WaitForSingleObject(hp, 1000)
+                    api.CloseHandle(ht);api.CloseHandle(hp)
+                    raise
+        namespace = dict(original.__globals__, _winapi=LaunchAPI())
+        launch = types.FunctionType(original.__code__, namespace, original.__name__,
+                                    original.__defaults__, original.__closure__)
+        launch.__kwdefaults__ = original.__kwdefaults__
+        return launch(self, *args, **kwargs)
+
+
+def _start_owned_process(job_handle, cmd_args, popen_kwargs):
+    """Separate observation point for actual native process CPU instrumentation."""
+    if job_handle is None:
+        return subprocess.Popen(cmd_args, **popen_kwargs)
+    return _JobPopen(cmd_args, job_handle=job_handle, **popen_kwargs)
+
+
+def _windows_job_active(job_handle: int) -> int:
+    import ctypes
+    kernel, Accounting = _windows_job_api()
+    value = Accounting()
+    if not kernel.QueryInformationJobObject(job_handle, 1, ctypes.byref(value), ctypes.sizeof(value), None):
+        raise OSError('Job process accounting unavailable')
+    return value.active
+
+
+def _reclaim_windows_job(job_handle: int, timeout: float = 1.0) -> None:
+    """Verify the owned job is empty, including descendants after root exit."""
+    if not _windows_job_active(job_handle):
+        return
+    kernel, _ = _windows_job_api()
+    if not kernel.TerminateJobObject(job_handle, 1):
+        raise OSError('Job termination unavailable')
+    deadline = time.monotonic() + timeout
+    while _windows_job_active(job_handle):
+        if time.monotonic() >= deadline:
+            raise ProcessCleanupError('Owned job still has active processes')
+        time.sleep(0.01)
+
+
 def _create_windows_job_object() -> int | None:
     """Create a Job Object with KILL_ON_JOB_CLOSE so descendants die with the job."""
     try:
         import ctypes
         import ctypes.wintypes
 
-        kernel32 = ctypes.windll.kernel32
+        kernel32, _ = _windows_job_api()
         h_job = kernel32.CreateJobObjectW(None, None)
         if not h_job:
             return None
@@ -336,16 +505,17 @@ def _assign_pid_to_windows_job(job_handle: int, pid: int) -> bool:
         PROCESS_TERMINATE = 0x0001
         PROCESS_SET_INFORMATION = 0x0200
         access = PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_SET_INFORMATION
-        h_proc = ctypes.windll.kernel32.OpenProcess(access, False, pid)
+        kernel32, _ = _windows_job_api()
+        h_proc = kernel32.OpenProcess(access, False, pid)
         if not h_proc:
             # Fallback broader access for older Windows variants
-            h_proc = ctypes.windll.kernel32.OpenProcess(0x1F0FFF, False, pid)
+            h_proc = kernel32.OpenProcess(0x1F0FFF, False, pid)
         if not h_proc:
             return False
         try:
-            return bool(ctypes.windll.kernel32.AssignProcessToJobObject(job_handle, h_proc))
+            return bool(kernel32.AssignProcessToJobObject(job_handle, h_proc))
         finally:
-            ctypes.windll.kernel32.CloseHandle(h_proc)
+            kernel32.CloseHandle(h_proc)
     except Exception:
         return False
 
@@ -357,13 +527,15 @@ def _terminate_windows_job(job_handle: int | None) -> None:
     try:
         import ctypes
 
-        ctypes.windll.kernel32.TerminateJobObject(job_handle, 1)
+        kernel32, _ = _windows_job_api()
+        kernel32.TerminateJobObject(job_handle, 1)
     except Exception:
         pass
     try:
         import ctypes
 
-        ctypes.windll.kernel32.CloseHandle(job_handle)
+        kernel32, _ = _windows_job_api()
+        kernel32.CloseHandle(job_handle)
     except Exception:
         pass
 
@@ -497,6 +669,7 @@ def run_safe_subprocess(
     inherit_env: bool = True,
     output_limit_bytes: int | None = None,
     cancel_check: Any = None,
+    process_started: Any = None,
 ) -> SafeSubprocessResult:
     """Run a command safely with timeout, process group termination, and secret masking.
 
@@ -575,17 +748,19 @@ def run_safe_subprocess(
         job_handle = _create_windows_job_object()
 
     t0 = time.perf_counter()
-    proc = subprocess.Popen(cmd_args, **popen_kwargs)
-    if job_handle is not None:
-        if not _assign_pid_to_windows_job(job_handle, proc.pid):
-            _terminate_windows_job(job_handle)
-            job_handle = None
+    try:
+        proc = _start_owned_process(job_handle, cmd_args, popen_kwargs)
+    except BaseException:
+        _terminate_windows_job(job_handle)
+        raise
 
     timed_out = False
     raw_stdout = ""
     raw_stderr = ""
 
     try:
+        if process_started is not None:
+            process_started(proc.pid)
         if output_limit_bytes is None and cancel_check is None:
             raw_stdout, raw_stderr = proc.communicate(timeout=timeout_seconds)
         else:
@@ -621,11 +796,28 @@ def run_safe_subprocess(
     finally:
         t1 = time.perf_counter()
         elapsed_ms = round((t1 - t0) * 1000.0, 2)
-        # Final reclamation barrier to guarantee zero orphan processes
-        descendants = _list_windows_descendants(proc.pid) if sys.platform == "win32" else []
-        if proc.poll() is None or _is_process_alive(proc.pid) or any(
+        # An assigned Job Object is the stronger, scoped ownership authority.
+        # Avoid enumerating unrelated system PIDs on every successful callback.
+        job_reclaimed = False
+        if job_handle is not None and proc.poll() is not None:
+            try:
+                _reclaim_windows_job(job_handle)
+            except OSError:
+                pass  # Unavailable accounting retains the full fallback below.
+            except BaseException:
+                _terminate_windows_job(job_handle)
+                job_handle = None
+                raise
+            else:
+                kernel32, _ = _windows_job_api()
+                kernel32.CloseHandle(job_handle)
+                job_handle = None
+                job_reclaimed = True
+        # Final fallback barrier for unassigned jobs or unavailable accounting.
+        descendants = _list_windows_descendants(proc.pid) if sys.platform == "win32" and not job_reclaimed else []
+        if not job_reclaimed and (proc.poll() is None or _is_process_alive(proc.pid) or any(
             _is_process_alive(p) for p in descendants
-        ):
+        )):
             terminate_process_tree(proc.pid, grace_period_sec=0.2, job_handle=job_handle)
             job_handle = None
             try:
@@ -645,7 +837,8 @@ def run_safe_subprocess(
             try:
                 import ctypes
 
-                ctypes.windll.kernel32.CloseHandle(job_handle)
+                kernel32, _ = _windows_job_api()
+                kernel32.CloseHandle(job_handle)
             except Exception:
                 pass
             job_handle = None

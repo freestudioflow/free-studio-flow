@@ -73,16 +73,32 @@ def affected_tasks(dependencies, changed):
     """Full declared-input closure, including prompts and evaluator dependencies."""
     if not set(changed) <= dependencies.keys():
         raise ProductionError("PRODUCTION_DEPENDENCY_INVALID")
-    pending, done = set(dependencies), set()
-    while pending:
-        ready = {k for k in pending if set(dependencies[k]) <= done}
-        if not ready:
+    from collections import deque
+    children = {task: [] for task in dependencies}
+    indegree = {}
+    for task, parents in dependencies.items():
+        parents = set(parents)
+        if not parents <= dependencies.keys():
             raise ProductionError("PRODUCTION_DEPENDENCY_INVALID")
-        done |= ready
-        pending -= ready
+        indegree[task] = len(parents)
+        for parent in parents:
+            children[parent].append(task)
+    ready = deque(task for task, count in indegree.items() if not count)
+    visited = 0
+    while ready:
+        parent = ready.popleft()
+        visited += 1
+        for task in children[parent]:
+            indegree[task] -= 1
+            if not indegree[task]:
+                ready.append(task)
+    if visited != len(dependencies):
+        raise ProductionError("PRODUCTION_DEPENDENCY_INVALID")
     result = set(changed)
-    while True:
-        more = {k for k, deps in dependencies.items() if result.intersection(deps)}
-        if more <= result:
-            return sorted(result)
-        result |= more
+    pending = deque(result)
+    while pending:
+        for task in children[pending.popleft()]:
+            if task not in result:
+                result.add(task)
+                pending.append(task)
+    return sorted(result)

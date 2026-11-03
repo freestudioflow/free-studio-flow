@@ -12,6 +12,34 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Candidate release notes (0.1.0rc10)
+
+Source version `0.1.0rc10` is a candidate, not a published PyPI release.
+Use matching parent and worker builds for the additions below.
+
+- Add an opt-in indexed production authority for task state, shared budget
+  admission, durable observation progress, bounded batch continuation and
+  cancellation/reconciliation. Unknown submissions retain their reservations.
+- Support quiescent migration and recovery while preserving execution bindings,
+  request identities and authorization scope. Descriptor, database and retirement
+  markers are not a single cross-file atomic transaction; old writers must stop.
+- Stream verified chunks on mounted storage and safely import immutable asset
+  packs with version and source/rights checks. Native archive limits and the lack
+  of qualified provider byte-offset resume remain explicit.
+- Connect operator ASR commands and an optional Whisper worker to dialogue
+  coverage, and render ducking without replacing manual gain or human listening.
+- Validate static glTF assets with pinned tools, probe a Godot import profile and
+  bind spatial placement sidecars to asset hashes. This does not qualify rendered
+  appearance, gameplay performance, tracking or physical XR devices.
+- Establish Windows subprocess ownership at creation and reclaim owned
+  descendants without enumerating unrelated processes on each normal callback.
+
+The store uses SQLite DELETE journaling and FULL synchronization. Qualification
+is specific to the tested runtime/filesystem; no WAL, network-filesystem or
+arbitrary power-loss durability is implied. Machine checks do not attest human
+review, semantic calibration or high-quality feature-film output. Required tools
+and models remain operator-configured; examples are not capability whitelists.
+
 ## Release notes (0.1.0rc9)
 
 Version `0.1.0rc9` is available on PyPI and GitHub Releases, published from

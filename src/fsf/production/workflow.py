@@ -16,6 +16,8 @@ class Workflow:
         self.path = path
 
     def create(self, *, production_id, binding_digest, dependencies):
+        from fsf.production.contracts import assert_live_path
+        assert_live_path(self.path)
         key(production_id)
         if not isinstance(binding_digest,str) or not re.fullmatch("[0-9a-f]{64}",binding_digest):
             raise ProductionError("PRODUCTION_INVALID")
@@ -131,5 +133,7 @@ class Workflow:
 
     @staticmethod
     def _save(path,state):
+        from fsf.production.contracts import assert_live_path
+        assert_live_path(path)
         state["revision"] += 1
         publish(path,seal(state,"state_digest"))

@@ -13,6 +13,50 @@ from fsf.production.control import file_identity
 CHUNK_BYTES = 8*1024*1024
 
 
+def transfer_chunks(manifest, *, source_root, destination_root):
+    """Copy immutable chunks between mounted disks, resuming at verified chunks.
+
+    This is a disk transport, not a claim of HTTP byte-offset support. Remote
+    adapters can deliver the same bounded chunk files using their own channel.
+    """
+    value = validate_manifest(manifest)
+    source, destination = _root(source_root), _root(destination_root)
+    copied = reused = 0
+    with edit_lock(destination / '.chunk-transfer'):
+        for item in value['chunks']:
+            expected = {name: item[name] for name in ('sha256', 'size_bytes')}
+            target = destination / item['sha256']
+            if target.exists():
+                if file_identity(target) != expected:
+                    raise ProductionError('PRODUCTION_CHUNK_CHANGED')
+                reused += item['size_bytes']
+                continue
+            original = source / item['sha256']
+            if file_identity(original) != expected:
+                raise ProductionError('PRODUCTION_CHUNK_CHANGED')
+            partial = destination / (item['sha256'] + '.transfer-partial')
+            _target(partial)
+            try:
+                with _open_reader(original) as incoming, partial.open('wb') as outgoing:
+                    count = 0
+                    while block := incoming.read(1024 * 1024):
+                        count += len(block)
+                        if count > item['size_bytes']:
+                            raise ProductionError('PRODUCTION_CHUNK_CHANGED')
+                        outgoing.write(block)
+                    outgoing.flush()
+                    os.fsync(outgoing.fileno())
+                if file_identity(partial) != expected or file_identity(original) != expected:
+                    raise ProductionError('PRODUCTION_CHUNK_CHANGED')
+                os.replace(partial, target)
+                copied += count
+            finally:
+                partial.unlink(missing_ok=True)
+        publish(destination / (value['manifest_digest'] + '.json'), value)
+    return {'transport': 'mounted_chunks_v1', 'manifest_digest': value['manifest_digest'],
+            'copied_bytes': copied, 'reused_bytes': reused, 'byte_offset_resume': False}
+
+
 def validate_manifest(value):
     if (not isinstance(value,dict) or set(value) != {"schema_version","sha256","size_bytes","chunk_bytes","chunks","manifest_digest"}
             or value["schema_version"] != "fsf_production_chunks_v1"
