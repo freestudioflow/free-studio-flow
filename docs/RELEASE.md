@@ -5,21 +5,24 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc9`**, available on PyPI.
+The current published pre-release is **`0.1.0rc10`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
-## Candidate release notes (0.1.0rc10)
+## Release notes (0.1.0rc10)
 
-Source version `0.1.0rc10` is a candidate, not a published PyPI release.
+Version `0.1.0rc10` is available on PyPI and GitHub Releases, published from
+tag `v0.1.0rc10` at commit `e2c2d0471d5597b32057bb965dff6757edbddc2e`.
 Use matching parent and worker builds for the additions below.
 
 - Add an opt-in indexed production authority for task state, shared budget
   admission, durable observation progress, bounded batch continuation and
   cancellation/reconciliation. Unknown submissions retain their reservations.
+- Preserve the requested duration when acquiring or renewing production leases
+  across wall-clock second boundaries.
 - Support quiescent migration and recovery while preserving execution bindings,
   request identities and authorization scope. Descriptor, database and retirement
   markers are not a single cross-file atomic transaction; old writers must stop.
@@ -185,10 +188,10 @@ PyPI versions are immutable: do not rebuild or re-upload an already-published
 version.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc9"
+python -m pip install "free-studio-flow==0.1.0rc10"
 ```
 
-The command above installs rc9. To develop against a checkout:
+The command above installs rc10. To develop against a checkout:
 
 ```powershell
 python -m venv .venv
@@ -229,10 +232,10 @@ them private and exclude them from release attachments.
 .\.venv\Scripts\python.exe -m twine check dist\*
 ```
 
-Published distribution filenames for `0.1.0rc9`:
+Published distribution filenames for `0.1.0rc10`:
 
-- `dist/free_studio_flow-0.1.0rc9-py3-none-any.whl`
-- `dist/free_studio_flow-0.1.0rc9.tar.gz`
+- `dist/free_studio_flow-0.1.0rc10-py3-none-any.whl`
+- `dist/free_studio_flow-0.1.0rc10.tar.gz`
 
 For future releases, build from the final commit and publish the approved
 distributions unchanged to GitHub Releases and PyPI. PyPI publication requires

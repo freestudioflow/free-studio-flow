@@ -11,21 +11,19 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc10`**.
 
-This source version is a candidate and has not yet been published.
-
-Latest verified PyPI release: **[`0.1.0rc9`](https://pypi.org/project/free-studio-flow/0.1.0rc9/)**,
-published from tag **[`v0.1.0rc9`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc9)**
-at commit `bca390ff1a2cd47009521fd98b0b8b809013305d`.
+Latest verified PyPI release: **[`0.1.0rc10`](https://pypi.org/project/free-studio-flow/0.1.0rc10/)**,
+published from tag **[`v0.1.0rc10`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc10)**
+at commit `e2c2d0471d5597b32057bb965dff6757edbddc2e`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc9"
+python -m pip install "free-studio-flow==0.1.0rc10"
 ```
 <!-- pypi-release-status:end -->
 
-The published rc9 package includes the earlier releases and the rc9 production
+The published rc10 package includes the earlier releases and the production
 and extension features described below.
 
-### Additions in the rc10 source candidate
+### Additions in rc10
 
 - Opt-in indexed production stores with atomic task and budget admission,
   durable batch progress, reconciliation, cancellation and quiescent migration.
@@ -43,9 +41,9 @@ and extension features described below.
   descendant cleanup and sanitized diagnostics.
 
 See [Indexed production workflows](docs/PRODUCTION_WORKFLOWS.md) for commands
-and qualification boundaries. These additions require the rc10 candidate build;
-they are not claims about the published rc9 wheel. Long-film quality, evaluator
-calibration and untested hardware remain separate qualifications.
+and qualification boundaries. These additions are included in the rc10
+distributions. Long-film quality, evaluator calibration and untested hardware
+remain separate qualifications.
 
 Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
 
@@ -56,7 +54,7 @@ profiles for text, image, video, audio and upscale outputs. Copy the disabled
 templates with `fsf remote templates --out config` into an existing empty
 directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
 for setup, recovery, provider protocol limits and recipe customization.
-These workflows and the production extensions below are included in the rc9
+These workflows and the production extensions below are included in the rc10
 distributions. Use matching parent and worker builds.
 Remote outputs retain parent-side QC and review requirements; successful transport
 does not establish real model inference or visual consistency.
