@@ -9,7 +9,7 @@ AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocu
 License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
-Source version in this branch: **`0.1.0rc10`**.
+Source version in this branch: **`0.1.0rc11`**.
 
 Latest verified PyPI release: **[`0.1.0rc10`](https://pypi.org/project/free-studio-flow/0.1.0rc10/)**,
 published from tag **[`v0.1.0rc10`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc10)**
@@ -19,6 +19,28 @@ at commit `e2c2d0471d5597b32057bb965dff6757edbddc2e`.
 python -m pip install "free-studio-flow==0.1.0rc10"
 ```
 <!-- pypi-release-status:end -->
+
+### Additions and accepted limits in rc11
+
+The rc11 source is a release candidate undergoing review.
+
+- Worker credential isolation, redacted diagnostics, destination policies and
+  operator-configured verifiers.
+- Portable multichannel controls, reference anchors, global timelines,
+  segment quality gates and recoverable publication.
+- Local synthetic media passed production QC, edit and delivery. One pinned
+  MobileNet V2 version was attached in a private offline Kaggle CPU run.
+- Neural control adherence and model A/B, Gemma/SA-3 weights, automatic Secret
+  attachment, missing historical evidence, calibrated semantic QC and human
+  motion/listening review remain pending.
+- A 10,000-task chain passed an independent write-volume rerun; another run
+  exceeded 256 KiB. The bound across runs remains unqualified.
+- L40S/B300, three-minute neural long takes, high-quality two-hour films and
+  physical XR qualification remain pending independent work.
+- Native archive limits, filesystem durability profiles and cross-execution
+  byte reuse retain their qualification boundaries.
+- An earlier Docker sampler failure passed isolated and full reruns. Its
+  underlying cause remains unresolved.
 
 The published rc10 package includes the earlier releases and the production
 and extension features described below.
@@ -45,7 +67,7 @@ and qualification boundaries. These additions are included in the rc10
 distributions. Long-film quality, evaluator calibration and untested hardware
 remain separate qualifications.
 
-Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/prodocux/b-roll-library-generator).
+Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/pdx-experimental/b-roll-library-generator).
 
 ### Remote workers and model APIs
 

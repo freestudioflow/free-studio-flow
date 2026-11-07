@@ -26,12 +26,18 @@ def wait_dispatch(key, *, profile, state_root):
 
 
 def main(argv=None):
+    operation_envelope=False
     parser=_Parser(prog="fsf remote",description="One-level approved worker jobs; separate from legacy shape transports")
     commands=parser.add_subparsers(dest="operation",required=True)
     templates=commands.add_parser("templates",help="Copy versioned, disabled operator templates")
     templates.add_argument("--out",required=True,action=_Once)
     validate=commands.add_parser("validate",help="Validate a recipe and its fixed PDX child plan")
     validate.add_argument("recipe")
+    reports=commands.add_parser('operation-reports',help='Read immutable local operation evidence; never submit')
+    reports.add_argument('directory')
+    revalidation=commands.add_parser('revalidate',help='Reverify existing bytes with a host-authorized verifier; no generation')
+    for name in ('request','outputs','original-result','visible','out'):
+        revalidation.add_argument('--'+name,required=True,action=_Once)
     compare=commands.add_parser("recipe-diff",help="List changed recipe paths and digests; never approve automatically")
     compare.add_argument("before")
     compare.add_argument("after")
@@ -81,7 +87,7 @@ def main(argv=None):
     dispatch2.add_argument('request')
     dispatch2.add_argument('--wait',action='store_true')
     for name in ('profile','store','state'):dispatch2.add_argument('--'+name,required=True,action=_Once)
-    for name in ('status-v2','reconcile-v2','fetch-v2','cancel-v2'):
+    for name in ('status-v2','reconcile-v2','fetch-v2','cancel-v2','diagnostics-v2'):
         child=commands.add_parser(name)
         child.add_argument('request_digest')
         for field in ('profile','store','state'):child.add_argument('--'+field,required=True,action=_Once)
@@ -172,7 +178,7 @@ def main(argv=None):
             if Path(args.out).exists():raise RemoteError('REMOTE_TARGET_EXISTS')
             write_json(args.out,secret_setup_notebook())
             result={'created':True,'submitted':False,'gpu_render':False,'model_inference':False}
-        elif args.operation in {'artifact-probe','artifact-put','artifact-get','prepare-v2','dispatch-v2','worker-v2','status-v2','reconcile-v2','fetch-v2','cancel-v2'}:
+        elif args.operation in {'artifact-probe','artifact-put','artifact-get','prepare-v2','dispatch-v2','worker-v2','status-v2','reconcile-v2','fetch-v2','cancel-v2','diagnostics-v2'}:
             from fsf.remote.artifacts import ArtifactStore
             store=ArtifactStore(read_json(args.store))
             if args.operation=='artifact-probe':result=store.probe()
@@ -197,6 +203,7 @@ def main(argv=None):
                 profile=read_json(args.profile)
                 if args.operation=='dispatch-v2':
                     request=read_json(args.request)
+                    operation_envelope=request.get('schema_version')=='fsf_remote_request_v4'
                     result=submit2(request,profile=profile,store=store,state_root=args.state,store_config=args.store)
                     if args.wait:
                         end=time.monotonic()+request['policy']['deadline_seconds']
@@ -208,10 +215,22 @@ def main(argv=None):
                             time.sleep(.25 if profile['transport']=='local' else 3)
                         else:raise RemoteError('REMOTE_DEADLINE_EXCEEDED')
                 else:
+                    stored=Path(args.state)/args.request_digest/'request.json'
+                    operation_envelope=read_json(stored).get('schema_version')=='fsf_remote_request_v4'
                     result=update2(args.request_digest,profile=profile,store=store,state_root=args.state,store_config=args.store,
-                        action='cancel' if args.operation=='cancel-v2' else 'fetch' if args.operation=='fetch-v2' else 'status',recover=getattr(args,'recover',False))
+                        action='diagnostics' if args.operation=='diagnostics-v2' else 'cancel' if args.operation=='cancel-v2' else 'fetch' if args.operation=='fetch-v2' else 'status',recover=getattr(args,'recover',False))
                     if result['status']=='cancel_unsupported':
                         print(json.dumps({'ok':False,'result':result}));return 3
+        elif args.operation=='operation-reports':
+            from fsf.remote.diagnostics import inspect
+            result={'reports':inspect(Path(args.directory)),'new_submissions':0}
+        elif args.operation=='revalidate':
+            from fsf.remote.v2 import validate_request
+            from fsf.remote.verifiers import revalidate
+            request=validate_request(read_json(args.request))
+            if request['recipe']['schema_version']!='fsf_remote_recipe_v4':raise RemoteError('REMOTE_SCHEMA')
+            result=revalidate(Path(args.outputs),request,read_json(args.visible),
+                original_result=read_json(args.original_result),destination=args.out)
         elif args.operation=="templates":
             from fsf.core.asset_library import _root
             root=_root(args.out)
@@ -243,8 +262,13 @@ def main(argv=None):
             from fsf.remote.environment import recipe_diff
             result=recipe_diff(read_json(args.before),read_json(args.after))
         elif args.operation=="validate":
-            recipe=validate_recipe(read_json(args.recipe))
-            result={"recipe_digest":recipe["recipe_digest"],"child_plan":compile_child_plan(recipe)}
+            value=read_json(args.recipe)
+            if value.get('schema_version') in {'fsf_remote_recipe_v2','fsf_remote_recipe_v3','fsf_remote_recipe_v4'}:
+                from fsf.remote.v2 import validate_recipe as validate2,child_plan
+                recipe=validate2(value);plan=child_plan(recipe)
+            else:
+                recipe=validate_recipe(value);plan=compile_child_plan(recipe)
+            result={"recipe_digest":recipe["recipe_digest"],"child_plan":plan}
         elif args.operation=="prepare":
             from fsf.remote.bundle import prepare_bundle
             result=prepare_bundle(read_json(args.definition),read_json(args.recipe),inputs_root=args.inputs,wheel=args.wheel,
@@ -288,6 +312,10 @@ def main(argv=None):
                 result=submit_bundle(args.bundle,profile=profile,state_root=args.state)
                 if args.wait:result=wait_dispatch(result["dispatch_id"],profile=profile,state_root=args.state)
             else:result=update_dispatch(args.dispatch_id,profile=profile,state_root=args.state,action=args.operation)
+        if operation_envelope:
+            pending=result.get('status') in {'submission_unknown','awaiting_activation','cancel_requested','cancel_unsupported'}
+            print(json.dumps({'schema_version':'rc11_operation_envelope_v1','ok':not pending,'result':result}))
+            return 3 if pending else 0
         print(json.dumps({"ok":True,"result":result},ensure_ascii=True))
         return 0
     except KeyboardInterrupt:
@@ -296,5 +324,8 @@ def main(argv=None):
         code=exc.code
     except Exception:
         code="REMOTE_INVALID"
-    print(json.dumps({"ok":False,"error":{"code":code,"message":"Operation could not be completed"}}))
+    error={"ok":False,"error":{"code":code,"message":"Operation could not be completed"}}
+    if operation_envelope:error['schema_version']='rc11_operation_envelope_v1'
+    print(json.dumps(error))
+    if operation_envelope and code in {'REMOTE_PREVIOUS_SUBMISSION_UNKNOWN','REMOTE_NOT_READY','REMOTE_KAGGLE_VERSION_AMBIGUOUS'}:return 3
     return 130 if code=="REMOTE_CANCELLED" else 2

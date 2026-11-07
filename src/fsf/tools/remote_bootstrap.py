@@ -71,9 +71,6 @@ def main():
             raise ValueError()
         env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "SSL_CERT_FILE", "SSL_CERT_DIR") if k in os.environ}
         env["FSF_REMOTE_DEPTH"] = "1"
-        for name in request["recipe"]["environment"]["credential_env_names"]:
-            if name in request["policy"]["credential_env_names"] and name in os.environ:
-                env[name] = os.environ[name]
         # Standalone bootstrap runs before the package is installed. Keep this
         # closed map aligned with fsf.remote.environment.INSTALL_NETWORK.
         install_network = {"FSF_REMOTE_INSTALL_HTTP_PROXY":"HTTP_PROXY",
@@ -86,6 +83,19 @@ def main():
             if remaining <= 0:
                 raise TimeoutError()
             effective_env = dict(env)
+            if phase != "worker":
+                for name in request["policy"]["credential_env_names"]:
+                    effective_env.pop(name, None)
+                for target in install_network.values():
+                    effective_env.pop(target, None)
+            else:
+                for name in request["recipe"]["environment"]["credential_env_names"]:
+                    if name not in request["policy"]["credential_env_names"]:
+                        raise ValueError("REMOTE_CREDENTIAL_NOT_AUTHORIZED")
+                    if not os.environ.get(name):
+                        raise ValueError("REMOTE_CREDENTIAL_MISSING")
+                    if name not in install_network:
+                        effective_env[name] = os.environ[name]
             if phase == "install":
                 for name, target in install_network.items():
                     if name in os.environ:
@@ -122,8 +132,11 @@ def main():
             old=json.loads(status_path.read_text()) if status_path.is_file() else {}
             if old.get("status") not in {"completed","cancelled","failed"}:
                 cancelled=isinstance(exc,KeyboardInterrupt)
+                code="REMOTE_CANCELLED" if cancelled else "REMOTE_BOOTSTRAP_"+phase.upper()+"_FAILED"
+                if isinstance(exc,ValueError) and str(exc) in {"REMOTE_CREDENTIAL_MISSING","REMOTE_CREDENTIAL_NOT_AUTHORIZED"}:
+                    code=str(exc)
                 status_path.write_text(json.dumps({"request_digest":key,"status":"cancelled" if cancelled else "failed",
-                    "error_code":"REMOTE_CANCELLED" if cancelled else "REMOTE_BOOTSTRAP_"+phase.upper()+"_FAILED"}))
+                    "error_code":code}))
         return 2
 
 

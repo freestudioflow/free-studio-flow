@@ -10,6 +10,8 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 import zipfile
+import re
+from datetime import datetime,timezone
 
 
 def failure_report(exc, phase):
@@ -20,6 +22,9 @@ def failure_report(exc, phase):
     """
     code = 'REMOTE_CANCELLED' if isinstance(exc, KeyboardInterrupt) else 'REMOTE_BOOTSTRAP_FAILED'
     report = {'ok': False, 'code': code, 'phase': phase}
+    if isinstance(exc,ValueError) and str(exc) in {'REMOTE_CREDENTIAL_MISSING','REMOTE_CREDENTIAL_NOT_AUTHORIZED','REMOTE_HOST_SECRET_ACCESS_FAILED'}:
+        report['code']=str(exc)
+        return report
     if not phase.startswith('host_secret_') or isinstance(exc, KeyboardInterrupt):
         return report
     report['code'] = 'REMOTE_HOST_SECRET_ACCESS_FAILED'
@@ -133,16 +138,28 @@ def main(argv=None):
                 env['FSF_ARTIFACT_STORE_CONFIG']=config_path
                 for name in request['recipe']['environment']['credential_env_names']:
                     if name not in request['policy']['credential_env_names']:raise ValueError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
-                    if name in os.environ:env[name]=os.environ[name]
-                    elif secret_client is not None:env[name]=secret_client.get_secret(name)
+                    value=os.environ.get(name)
+                    if not value and secret_client is not None:
+                        try:value=secret_client.get_secret(name)
+                        except Exception:raise ValueError('REMOTE_HOST_SECRET_ACCESS_FAILED') from None
+                    if not value:raise ValueError('REMOTE_CREDENTIAL_MISSING')
+                    if name not in {'FSF_REMOTE_INSTALL_HTTP_PROXY','FSF_REMOTE_INSTALL_HTTPS_PROXY','FSF_REMOTE_INSTALL_NO_PROXY','FSF_REMOTE_INSTALL_CA'}:
+                        env[name]=value
             if installation:
                 for name,target in {'FSF_REMOTE_INSTALL_HTTP_PROXY':'HTTP_PROXY','FSF_REMOTE_INSTALL_HTTPS_PROXY':'HTTPS_PROXY',
                                     'FSF_REMOTE_INSTALL_NO_PROXY':'NO_PROXY','FSF_REMOTE_INSTALL_CA':'SSL_CERT_FILE'}.items():
                     if name in os.environ:
                         if name not in request['policy']['credential_env_names']:raise ValueError('REMOTE_INSTALL_NETWORK_NOT_AUTHORIZED')
                         env[target]=os.environ[name]
-            res=module.run_safe_subprocess(command,cwd=root,timeout_seconds=remaining,output_limit_bytes=1024*1024,env=env,inherit_env=False,
+            command_started=datetime.now(timezone.utc).isoformat();clock=time.monotonic()
+            res=module.run_safe_subprocess(command,cwd=root,timeout_seconds=remaining,output_limit_bytes=16*1024*1024,env=env,inherit_env=False,
                 cancel_check=lambda:(root/'cancel').exists())
+            if res.returncode or res.timed_out:
+                clean=module.sanitize_process_text(res.stderr+'\n'+res.stdout,env=env)
+                codes=sorted(set(re.findall(r'\b[A-Z][A-Z0-9]{1,31}(?:_[A-Z0-9]{1,32}){1,6}\b',clean)))[:32]
+                print(json.dumps({'bootstrap_phase':phase,'returncode':res.returncode,'timed_out':res.timed_out,
+                    'error_codes':codes,'started_at':command_started,'finished_at':datetime.now(timezone.utc).isoformat(),
+                    'elapsed_seconds':time.monotonic()-clock}))
             if res.returncode==130:raise KeyboardInterrupt()
             if res.timed_out or res.returncode:raise ValueError('REMOTE_BOOTSTRAP_FAILED')
         phase='worker_environment'

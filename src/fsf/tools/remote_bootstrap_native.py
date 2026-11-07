@@ -10,6 +10,8 @@ import sys
 import tempfile
 import time
 import zipfile
+import re
+from datetime import datetime,timezone
 
 started=time.monotonic();root=Path(WORK_ROOT) if 'WORK_ROOT' in globals() else Path(tempfile.mkdtemp(prefix='fsf-native-'))
 root.mkdir(parents=True,exist_ok=True)
@@ -50,28 +52,38 @@ try:
     env={k:os.environ[k] for k in ('PATH','HOME','TEMP','TMP','SystemRoot','WINDIR') if k in os.environ}
     for name in ('LD_LIBRARY_PATH','CUDA_HOME','CUDA_PATH','CUDA_VISIBLE_DEVICES','NVIDIA_VISIBLE_DEVICES','NVIDIA_DRIVER_CAPABILITIES'):
         if name in os.environ:env[name]=os.environ[name]
-    def run(args):
+    def run(args,worker=False):
         remaining=DEADLINE-(time.monotonic()-started)
         if remaining<=0:raise TimeoutError()
-        value=safety_module.run_safe_subprocess(args,cwd=root,env=env,inherit_env=False,timeout_seconds=remaining,output_limit_bytes=1024*1024)
+        child_env=dict(env)
+        if worker:
+            for name in request['recipe']['environment']['credential_env_names']:
+                if name not in request['policy']['credential_env_names']:raise ValueError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
+                if not os.environ.get(name):raise ValueError('REMOTE_CREDENTIAL_MISSING')
+                if name not in {'FSF_REMOTE_INSTALL_HTTP_PROXY','FSF_REMOTE_INSTALL_HTTPS_PROXY','FSF_REMOTE_INSTALL_NO_PROXY','FSF_REMOTE_INSTALL_CA'}:
+                    child_env[name]=os.environ[name]
+        command_started=datetime.now(timezone.utc).isoformat();clock=time.monotonic()
+        value=safety_module.run_safe_subprocess(args,cwd=root,env=child_env,inherit_env=False,timeout_seconds=remaining,output_limit_bytes=16*1024*1024)
         if value.timed_out or value.returncode:
-            known={'REMOTE_ENVIRONMENT_MISMATCH','REMOTE_STALE_WHEEL','REMOTE_WORKER_VERSION',
-                   'REMOTE_WORKER_FAILED','REMOTE_MODEL_EVIDENCE','REMOTE_MODEL_INTEGRITY',
-                   'REMOTE_GPU_DEVICE_MISMATCH','REMOTE_COMMAND_FAILED'}
-            codes=[code for code in sorted(known) if code in value.stderr or code in value.stdout]
+            clean=safety_module.sanitize_process_text(value.stderr+'\n'+value.stdout,env=child_env)
+            codes=sorted(set(re.findall(r'\b[A-Z][A-Z0-9]{1,31}(?:_[A-Z0-9]{1,32}){1,6}\b',clean)))[:32]
             print(json.dumps({'native_phase':phase,'returncode':value.returncode,
-                              'timed_out':value.timed_out,'error_codes':codes}))
+                              'timed_out':value.timed_out,'error_codes':codes,
+                              'started_at':command_started,'finished_at':datetime.now(timezone.utc).isoformat(),
+                              'elapsed_seconds':time.monotonic()-clock}))
             raise RuntimeError('REMOTE_NATIVE_BOOTSTRAP_FAILED')
     phase='worker_environment';venv=root/'venv';run([sys.executable,'-m','venv','--without-pip',str(venv)])
     python=venv/'bin/python'
     phase='worker_installation'
     run([sys.executable,'-m','pip','--python',str(python),'install','-q','--disable-pip-version-check','--index-url','https://pypi.org/simple',str(package)+'[remote]'])
     phase='worker_execution'
-    run([str(python),'-m','fsf.remote.kaggle_native_worker',str(root),'--out',globals().get('RESULT_OUT','/kaggle/working/fsf-native-result.zip')])
+    run([str(python),'-m','fsf.remote.kaggle_native_worker',str(root),'--out',globals().get('RESULT_OUT','/kaggle/working/fsf-native-result.zip')],worker=True)
     status('completed')
     print(json.dumps({'native_worker':'completed','artifacts_in_log':False}))
 except BaseException as exc:
     status('failed')
     code='REMOTE_INSTALL_OUTPUT_LIMIT' if str(exc)=='PROCESS_OUTPUT_LIMIT' else 'REMOTE_NATIVE_BOOTSTRAP_FAILED'
+    if isinstance(exc,ValueError) and str(exc) in {'REMOTE_CREDENTIAL_MISSING','REMOTE_CREDENTIAL_NOT_AUTHORIZED','REMOTE_HOST_SECRET_ACCESS_FAILED'}:
+        code=str(exc)
     print(json.dumps({'native_worker':'failed','code':code,'phase':phase}))
     raise RuntimeError('REMOTE_NATIVE_BOOTSTRAP_FAILED') from None

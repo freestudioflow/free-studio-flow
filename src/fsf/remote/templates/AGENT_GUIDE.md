@@ -60,7 +60,7 @@ declare its setup and output contract, and test it before approving its digest.
 
 This Python example prepares operator files only. Run it from a directory with
 the installed FSF package. Place an audited wheel built from the same source at
-`runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl`. A released wheel lacking
+`runtime/free_studio_flow-0.1.0rc11-py3-none-any.whl`. A released wheel lacking
 these modules cannot be used as a worker. Check the version of your build.
 
 ```python
@@ -96,7 +96,7 @@ production plan use the actual parent identities and digests; the opt-in remote
 executor supplies them directly from PlanExecutor.
 
 ```text
-fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl --profile config/local.profile.json --out state
+fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc11-py3-none-any.whl --profile config/local.profile.json --out state
 fsf remote diagnose --profile config/local.profile.json --probe
 ```
 
@@ -118,7 +118,7 @@ From a source checkout supporting `preflight`, use a worker wheel built from
 that same checkout:
 
 ```text
-fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc10-py3-none-any.whl --profile config/local.profile.json
+fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc11-py3-none-any.whl --profile config/local.profile.json
 ```
 
 This read-only check validates declarations, authorization, QC contract digests
@@ -383,3 +383,222 @@ rules still apply. Supported Blender versions remain the explicitly tested
 Connection, local CPU contract tests, real remote GPU rendering and human review
 are different evidence. Remote readiness must be demonstrated on the intended
 host; a template or a local result cannot establish it.
+
+## Typed recipes, optional inputs and host verification
+
+Recipe v4 is additive. Existing v1-v3 recipes keep their seals and validation
+rules. Do not rewrite a precision string or reseal an approved old recipe as a
+migration shortcut. A v4 model/tool lock uses `rc11_lock_v1`: immutable source
+identity, component compute dtype, weight format, quantization and offload are
+separate attributes. Each attribute declares `known` with a value, `unknown`, or
+`not_applicable`. Model names and backend names are not an official allowlist.
+Qualification references do not grant qualification by themselves.
+
+Each v4 input declares `required` and a `consumer` with `kind` and `step_ids`.
+Kinds are `argv_group` (with an `args` array), `stdin_manifest`, `manifest`, and
+`controlled_directory`. An absent optional input omits its entire argv group.
+Required inputs cannot be absent. The sealed recipe contains `input_mode`;
+the worker writes `input-bindings.json`, including presence and content hashes.
+Use `{input_manifest}` or `{input_directory}` in a declared command, or consume
+the manifest on stdin. Input values never become shell expressions. All present
+inputs still pass the ordinary reference, role, media type, SHA and size checks.
+
+Validate the sealed recipe without submitting:
+
+```text
+python -m fsf.cli remote validate recipe.json
+```
+
+V4 recipes use the existing `prepare-v2`, `dispatch-v2`, `worker-v2` and
+`fetch-v2` commands with request v4. Preparation reads the wheel archive and
+compares its metadata/core with the parent and prepared request before dispatch.
+The worker checks again. A stale wheel must be rebuilt; changing the expected
+digest to hide a mismatch is not a repair.
+
+The model requirements bind `verifier_id` and `verifier_digest`. The host sets
+`FSF_REMOTE_VERIFIERS_FILE` to an operator-owned JSON registry with version
+`rc11_verifier_registry_v1`, `authorized: true`, and an `entries` list. Each
+entry declares `id`, `command` (argv), `code_path`, `code_sha256`,
+`program_sha256`, `timeout_seconds` (1-120), and `receipt_versions`.
+`verifier_digest` is the canonical digest of that entry. Both code and program
+are pinned and absolute on that host; the code path must occur in the command.
+This is trusted operator code, not a sandbox. The registry is not loaded from
+the receipt and is not automatically installed on another machine.
+
+The verifier receives JSON with `request`, `receipt`, and a host-local
+`outputs_root` on stdin so it can inspect the actual artifact bytes. It must return
+exactly `{"accepted": true, "receipt_digest": "<bound receipt digest>"}`.
+Common identity, output SHA, device and execution checks run before it. A
+custom receipt cannot invent a GPU call for a CPU tool. V4 extension evidence
+is marked `observed`; it does not grant semantic or human approval.
+
+Revalidate existing bytes without generating again:
+
+```text
+python -m fsf.cli remote revalidate --request request.json --outputs outputs --original-result result.json --visible visible.json --out revalidation.json
+python -m fsf.cli remote operation-reports state/request-digest
+python -m fsf.cli remote diagnostics-v2 REQUEST_DIGEST --profile profile.json --store store.json --state state
+```
+
+Revalidation writes a new record and preserves the old failed result. It cannot
+recover missing historical evidence. Operation reports retain individual phases,
+real subprocess exits and bounded, sanitized output. Status/fetch do not erase
+the original submit diagnostic. Submission `unknown` retains its reservation;
+`diagnostics-v2` retrieves bound diagnostics from a terminal job without accepting
+media, approving failed-job recovery or releasing an unknown reservation.
+HTTP 403/404 or an unchanged notebook version does not permit resubmission.
+The explicit request-v4 operation envelope uses exit 3 for unresolved submission
+or cancellation, 2 for failure and 130 for cancellation interruption. Legacy
+command envelopes keep their existing conventions.
+
+Profile v4 adds `destination` with `intent`, `model_sources`, and
+`secret_aliases`. The two notebook aliases must resolve to the same slug.
+Model sources require explicit numeric versions; mounted contents still need
+normal input verification. Use an exact
+`owner/model/framework/variation/version` reference with authorized access.
+For offline use, verify the mounted file list and digests before execution.
+A missing mount or mismatched digest must stop the job. Model attachment does
+not grant access to a gated model or transfer notebook Secrets.
+`create_private` requires positive scoped provider
+evidence: the current SDK gateway does not supply it and reports unverified.
+Secret attachment capability is also unavailable until a real interface is
+qualified. No fake metadata, browser requirement, or new storage service is
+introduced to bypass those missing capabilities. Existing private/native paths
+remain separate from these optional capabilities.
+
+Declared worker credentials must be authorized and non-empty before a worker
+command starts. Missing and empty values fail closed. Installation removes
+worker credential names even when they were present in the parent environment;
+only separately authorized installation proxy/CA settings are added. A host
+Secret Manager read exception is an access failure, not proof of an absent or
+invalid token. Bootstrap environment forwarding does not grant notebook Secret
+attachment capability.
+
+## Portable multichannel control bundles
+
+These commands inspect or copy existing control bytes. They do not launch
+Blender, generate media, dispatch a job, or certify model obedience:
+
+```text
+fsf blender bundle-import definition.json --resources resources --out library
+fsf blender bundle-verify library/scene_control
+fsf blender bundle-window library/scene_control --start 24 --end 48 --capability capability.json --require depth --out window.json
+```
+
+Create the resource and library directories first. The definition uses the
+packaged `rc11_control_bundle_v1` schema. Seal `bundle_digest` with
+`fsf.production.contracts.seal`, not a parallel hashing algorithm. The global
+`mapping_digest` is the canonical digest of the following object:
+
+```json
+{"clock":{"num":24,"den":1},"frame_count":120,"range":[0,120]}
+```
+
+Each ordered channel repeats that clock, count, width, height and mapping
+digest. It declares `id`, `kind`, `required`, `source_method`, `encoding`,
+`semantics`, `semantics_digest`, `provenance` and a hashed `manifest` reference.
+Every reference contains a portable relative `path`, SHA-256 and `size_bytes`.
+The UTF-8 manifest is JSON Lines, one `rc11_control_frame_v1` record per global
+frame in ascending order, starting at zero. For example:
+
+```json
+{"global_frame":0,"artifact":{"path":"frames/rgb-000000.png","sha256":"REPLACE_WITH_SHA256","size_bytes":1234}}
+```
+
+Replace the illustrative hash and size with the actual values. Missing frames,
+conflicting references, unknown fields, unsafe paths and changed bytes fail.
+Import preserves source bytes, publishes a complete directory after validation,
+and only revalidates an identical existing definition; it does not overwrite it.
+
+RGB is RGB8 PNG with an explicit `srgb` or `linear` declaration; edge is grayscale
+PNG with a generator and parameter digest. Depth and normal are little-endian
+float32 arrays in row-major pixel order. They require a separate one-byte-per-
+pixel `invalid_mask` reference: 1 is valid and 0 is invalid. Nonfinite values are
+only permitted in masked-out pixels. Depth declares camera-Z or ray distance,
+metres, fixed near/far, metric or linearly normalized representation and reverse
+mapping. Normal declares its space, orthonormal axes, handedness, orientation
+and explicit face-forward behavior. Valid normals must be unit vectors. Pose
+uses a JSON object with `space` and bounded `points` (`id`, `x`, `y`, `z`,
+`confidence`); normalized image-space x/y lie in [0,1]. Custom opaque channels
+are available with a namespace and format version; their bytes are verified,
+not their domain semantics. No channel is interpreted from its filename alone.
+
+`source_method` is `analytic_ray_cast`, `renderer_pass` or `external`. Per-channel
+provenance contains producer, version, optional binary SHA and a declared or
+observed label. RGB render metadata additionally records engine, samples, seed,
+material/world profiles and optional pinned denoiser/settings. These are bound
+declarations, not independent attestation. An external bundle receives no
+invented Blender receipt. Supplying a sample count does not qualify RGB quality.
+
+A capability document has `schema_version: rc11_control_capability_v1` and a
+`channels` list of exact `kind`, `encoding`, `semantics_digest` objects. Every
+required channel must be supported; unsupported required data cannot silently
+become prompt-only. All channels use one exact global clock and geometry. An
+adapter needing resized or differently mapped inputs must create an explicit
+derived bundle; this importer never rescales, crops, flips, normalizes per frame
+or changes fps. Windows are half-open global frame intervals, not new shots.
+
+The new path accepts 24/1 or 24000/1001 CFR clocks, even dimensions 32-3840,
+up to 120 minutes and 64 GiB of unique resources. It has no four-second input
+cap. Existing short-control commands retain their contracts. Validation streams
+manifests and numeric data, loads at most a pair of image frames for conversion,
+and spills the reference index to temporary disk. Bounds include 64 KiB per
+manifest line, 512 MiB per manifest, 256 MiB per frame, 1 million unique
+references, 8 MiB per returned window and a 1-5400 second operation timeout.
+Default timeout is 300 seconds; use `--seconds` for an explicit value within
+that range. These are bounded implementation limits, not
+model capability claims. Large windows must be requested in smaller intervals.
+
+Optional per-frame `conversion` binds the original `source` reference and a
+profile. `lossless_samples_v1` requires identical decoded RGB samples, while
+`lossy_rgb_reference_v1_1` requires SSIM >= 0.98, per-channel mean absolute error
+<= 3/255, absolute signed bias <= 1/255 and maximum absolute error <= 32/255.
+All pixels participate, including edges. SSIM uses RGB population statistics
+in 8x8 windows with data range 255. Embedded color metadata must match; no
+implicit gamma transform is performed. Non-RGB numeric conversions currently
+only accept byte-identical lossless sources. MP4 conversion is not performed
+by these commands. Keep each actual adapter conversion as a separate artifact.
+
+Verification seals its report and distinguishes full content verification from
+window-only checks. Both leave provenance unattested, geometry accuracy and
+RGB quality not evaluated, and motion review not reviewed. Format conformance,
+renderer quality, independent geometric truth and generated motion following
+the control are separate qualifications. A window report cannot qualify the
+unread content of the rest of the bundle.
+
+## Local timeline handoff
+
+Use the Python API in `fsf.production.timeline` for local probe callbacks.
+`compile_schedule(clock, frame_count, tracks)` seals global half-open spans
+with a track, subject, range, value and interpolation. Camera positions and
+linear action trajectories use metric `from_m` and `to_m` vectors. Prompt,
+prop and world values travel as explicit schedule data. Consecutive spans for
+one camera must join at the same position and global boundary.
+
+`compile_bundle_plan(bundle, capability, shot_id=...)` builds the core,
+context and explicit padding ranges. The capability binds the control channel
+contract, clock, dimensions, model lock and supported timeline inputs.
+`build_request` verifies the selected window and binds active anchors and
+accepted initialization references. Pass initialization only from the
+caller's trusted acceptance store. `invoke_local` checks the callback's
+request digest and consumed input digests under a cooperative deadline.
+
+For a single-frame MP4 adapter derivative, `verify_mp4_initialization`
+records both artifact hashes, validates the clock and dimensions, and measures
+decoded RGB against the source PNG. Local callback acknowledgments are probe
+evidence. Production acceptance and generated-motion evaluation are separate.
+
+## Indexed local quality probes
+
+Pass a `LocalSegmentGate` as `quality_gate` to the Python
+`run_store_batch` entry point for bounded local experiments. Bind the policy
+and evaluator digests and required checks when opening the execution. The
+runner records each evaluation before calling the cooperative evaluator.
+Missing analysis and uncalibrated evaluations stay unknown. An unknown
+result retains the generated attempt and its downstream dependency hold.
+A rejection uses the existing repair reservation path and budget limits.
+
+Fixture scope records machine decisions for a controlled local test.
+Delivery mode refuses this gate. The metric and reference helpers require
+independent observations supplied by the caller. Human review remains a
+separate state.

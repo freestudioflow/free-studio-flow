@@ -119,6 +119,8 @@ CREATE TRIGGER outbox_update INSTEAD OF UPDATE ON outbox BEGIN
 END;
 CREATE TABLE events(seq INTEGER PRIMARY KEY, execution TEXT, task TEXT,
  request TEXT, kind TEXT NOT NULL, payload TEXT NOT NULL, revision INTEGER NOT NULL);
+CREATE INDEX event_execution_kind ON events(execution,kind);
+CREATE INDEX event_request_kind ON events(request,kind);
 CREATE TABLE verification_runs(id TEXT PRIMARY KEY, execution TEXT NOT NULL REFERENCES executions(id),
  revision INTEGER NOT NULL, driver TEXT NOT NULL, policy TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
  phase TEXT NOT NULL CHECK(phase IN ('verify','complete','invalid')), kind TEXT NOT NULL);
@@ -365,7 +367,7 @@ class ProductionStore:
             raise ProductionError('PRODUCTION_BINDING_CHANGED')
         return row['id']
 
-    def bind_driver(self, execution, config):
+    def bind_driver(self, execution, config, *, quality_binding=None):
         binding = digest(config)
         with self.transaction():
             row = self.db.execute('SELECT driver FROM executions WHERE id=?', (execution,)).fetchone()
@@ -373,7 +375,10 @@ class ProductionStore:
                 raise ProductionError('PRODUCTION_PROVIDER_CHANGED')
             if row['driver'] is None:
                 self.db.execute('UPDATE executions SET driver=? WHERE id=?', (binding, execution))
-                self._event('driver_bound', execution, payload={'digest': binding})
+                payload = {'digest': binding}
+                if quality_binding is not None:
+                    payload['quality_binding'] = quality_binding
+                self._event('driver_bound', execution, payload=payload)
         return binding
 
     def _active(self, execution):
@@ -651,6 +656,24 @@ class ProductionStore:
             raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
         with self.transaction():
             prior = self._fence(request, epoch)
+            binding = self.db.execute("SELECT payload FROM events WHERE execution=? AND kind='driver_bound'",
+                                      (prior['execution'],)).fetchone()
+            quality_binding = _load(binding[0]).get('quality_binding') if binding else None
+            if quality_binding is not None:
+                intent = self.db.execute("""SELECT payload FROM events WHERE request=?
+                    AND kind='publication_intent' ORDER BY seq DESC LIMIT 1""", (request,)).fetchone()
+                if (not intent or _load(intent[0])['evidence'] != evidence
+                        or evidence.get('publication_request') != request
+                        or Path(artifact).absolute() != (self.root / 'published' / request).absolute()):
+                    raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
+                receipt = self.db.execute("""SELECT payload FROM events WHERE request=?
+                    AND kind='segment_quality_result' ORDER BY seq DESC LIMIT 1""", (request,)).fetchone()
+                if (not receipt or _load(receipt[0]) != evidence.get('segment_quality')
+                        or evidence['segment_quality']['binding_digest'] != quality_binding
+                        or evidence['segment_quality']['artifact_sha256'] != evidence['artifact_sha256']
+                        or evidence['segment_quality']['technical_digest'] != evidence.get('technical_evidence', {}).get('report_digest')
+                        or evidence['segment_quality']['verdict'] != 'accept'):
+                    raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
             policy = self.db.execute('SELECT policy FROM executions WHERE id=?', (prior['execution'],)).fetchone()[0]
             if evidence.get('policy_digest') != policy or prior['status'] not in {'produced', 'verified'}:
                 raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
@@ -666,12 +689,17 @@ class ProductionStore:
                             (prior['execution'], shot))
             self._event('machine_accepted', prior['execution'], prior['task'], request, execution_change=True)
 
-    def reject(self, request, epoch, evidence):
+    def reject(self, request, epoch, evidence, *, artifact=None):
+        if artifact is not None:
+            from fsf.production.control import file_identity
+            if file_identity(artifact)['sha256'] != evidence.get('artifact_sha256'):
+                raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
+            artifact = str(Path(artifact).absolute())
         with self.transaction():
             prior = self._fence(request, epoch)
             if prior['status'] != 'produced' or evidence.get('verdict') != 'reject' or seal(evidence, 'report_digest') != evidence:
                 raise ProductionError('PRODUCTION_EVIDENCE_REQUIRED')
-            self._record_result(request, evidence)
+            self._record_result(request, evidence, artifact)
             self.db.execute("UPDATE attempts SET status='rejected' WHERE request=?", (request,))
             self.db.execute("UPDATE tasks SET status='rejected' WHERE execution=? AND id=?", (prior['execution'], prior['task']))
             self._event('rejected', prior['execution'], prior['task'], request, execution_change=True)

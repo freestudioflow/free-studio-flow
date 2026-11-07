@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import re
 import copy
+import time
 from contextlib import contextmanager
 
 from fsf.core.edit_store import read_json
@@ -102,14 +103,20 @@ class CommandAdapter:
         for name in self.settings['credential_env_names']:
             if name not in os.environ:raise RemoteError('REMOTE_ADAPTER_AUTH_MISSING')
             env[name] = os.environ[name]
+        from fsf.remote.diagnostics import now,record,safe_text
+        started=now();clock=time.monotonic()
         result = run_safe_subprocess([*self.settings['command'],str(source),str(target)],
             cwd=self.settings['cwd'], env=env, inherit_env=False,
             timeout_seconds=timeout, output_limit_bytes=16384)
+        record(directory,request_id=request['request_digest'],phase=operation,started_at=started,started_clock=clock,
+               operation_status='failed' if result.returncode or result.timed_out else 'succeeded',
+               submission_status='unknown' if operation=='submit' else 'not_attempted',result=result,env=env,
+               code='REMOTE_ADAPTER_FAILED' if result.returncode or result.timed_out else None)
         if result.timed_out or result.returncode or not target.is_file() or target.is_symlink():
             write_json(directory/('adapter-'+operation+'-failure.json'),{
                 'schema_version':'fsf_command_adapter_failure_v1','request_digest':request['request_digest'],
                 'operation':operation,'returncode':result.returncode,'timed_out':result.timed_out,
-                'stdout':result.stdout,'stderr':result.stderr})
+                'stdout':safe_text(result.stdout,env=env),'stderr':safe_text(result.stderr,env=env)})
         if result.timed_out:raise RemoteError('REMOTE_ADAPTER_TIMEOUT')
         if result.returncode or not target.is_file() or target.is_symlink():raise RemoteError('REMOTE_ADAPTER_FAILED')
         secrets=[env[n] for n in self.settings['credential_env_names']]

@@ -29,7 +29,10 @@ INSTALL_NETWORK = {'FSF_REMOTE_INSTALL_HTTP_PROXY':'HTTP_PROXY',
 def install_environment(base, authorized_names, *, source=None):
     """Copy only explicitly authorized host installation settings, never evidence."""
     source = os.environ if source is None else source
-    result = dict(base)
+    # Worker credentials never reach package installation. Proxy/CA settings
+    # have their own explicit authorization and are added from the host below.
+    result = {k:v for k,v in base.items()
+              if k not in authorized_names and k not in INSTALL_NETWORK.values()}
     for name, target in INSTALL_NETWORK.items():
         result.pop(name, None)
         if name in source:

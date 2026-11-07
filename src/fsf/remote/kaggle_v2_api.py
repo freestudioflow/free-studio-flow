@@ -68,6 +68,8 @@ def call(value):
     owner=os.environ.get(profile['settings'].get('owner_env','KAGGLE_USERNAME')) or api.config_values.get('username')
     if not owner or not re.fullmatch('[A-Za-z0-9_-]+',owner):raise RemoteError('REMOTE_KAGGLE_OWNER')
     operation=value['operation'];expected=metadata(request,profile,owner)
+    from fsf.remote.destination import authorize_create
+    authorize_create(profile,owner=owner)
     fixed_slot=bool(profile['settings'].get('worker_notebook'))
     browser_activation=profile['settings'].get('activation_mode')=='agent_browser'
     if browser_activation and not fixed_slot:raise RemoteError('REMOTE_KAGGLE_WORKER_NOTEBOOK')

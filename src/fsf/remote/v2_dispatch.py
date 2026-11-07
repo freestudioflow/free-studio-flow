@@ -66,16 +66,23 @@ def submit(request,*,profile,store,state_root,store_config,adapter=None):
         reserve(profile,request,owner=root)
         ledger.update(status='submission_unknown',submitted_count=1)
         _save(directory/'ledger.json',ledger)
+        from fsf.remote.diagnostics import now, record, safe_code
+        started_at=now();started_clock=time.monotonic()
         try:
             ledger['remote']=adapter.submit(request,locator,directory)
             if ledger['remote'].get('activation_pending') is True:
                 ledger['status']='awaiting_activation';ledger['submitted_count']=0
             else:
                 ledger['status']='submitted'
+            record(directory,request_id=key,phase='submit',started_at=started_at,started_clock=started_clock,
+                   operation_status='succeeded',submission_status='not_attempted' if ledger['status']=='awaiting_activation' else 'accepted')
         except KeyboardInterrupt:
+            record(directory,request_id=key,phase='submit',started_at=started_at,started_clock=started_clock,
+                   operation_status='cancelled',submission_status='unknown',code='REMOTE_CANCELLED')
             _save(directory/'ledger.json',ledger);raise RemoteError('REMOTE_CANCELLED') from None
-        except Exception:
-            pass
+        except Exception as exc:
+            record(directory,request_id=key,phase='submit',started_at=started_at,started_clock=started_clock,
+                   operation_status='failed',submission_status='unknown',code=safe_code(exc))
         return summary(_save(directory/'ledger.json',ledger))
 
 
@@ -88,7 +95,7 @@ def update(key,*,profile,store,state_root,store_config,action='status',adapter=N
         ledger=_read(directory/'ledger.json')
         if ledger['profile_digest']!=digest(profile) or ledger['request_digest']!=request['request_digest']:raise RemoteError('REMOTE_NOT_AUTHORIZED')
         if (profile['transport']=='kaggle' and (profile['settings'].get('worker_notebook') or profile['settings'].get('native_notebook'))
-                and ledger['status'] in {'verified','recovered_verified'} and action!='cancel'):
+                and ledger['status'] in {'verified','recovered_verified'} and action in {'status','fetch'}):
             # A later saved version in the operator slot cannot become evidence
             # about an older accepted request. Revalidate its immutable result.
             if action=='fetch':
@@ -109,6 +116,12 @@ def update(key,*,profile,store,state_root,store_config,action='status',adapter=N
         observed=adapter.status(request,ledger['remote'],directory)
         if observed not in {'completed','failed','cancelled','running','queued','unknown'}:raise RemoteError('REMOTE_PROVIDER_STATUS')
         ledger['provider_status']=observed
+        if action=='diagnostics':
+            if observed not in {'completed','failed','cancelled'}:raise RemoteError('REMOTE_NOT_READY')
+            if hasattr(adapter,'fetch_into_store'):adapter.fetch_into_store(request,ledger['remote'],directory)
+            from fsf.remote.v2 import collect_diagnostics
+            evidence=collect_diagnostics(request,store=store,directory=directory)
+            return {**summary(_save(directory/'ledger.json',ledger)),'diagnostics':evidence}
         if action=='fetch':
             if observed in {'running','queued','unknown'}:raise RemoteError('REMOTE_NOT_READY')
             recovery=observed in {'failed','cancelled'}

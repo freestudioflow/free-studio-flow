@@ -113,10 +113,22 @@ def run_sequence(bundle,plan,*,output_root,generator,seconds=300,max_new_segment
                     or file_identity(folder/'movie.mp4')!=value['output']):
                 raise ProductionError('PRODUCTION_CHECKPOINT_CHANGED')
             return {**value,'new_segments':new,'status':'completed','bundle':plan['plan_digest']}
-        listing=folder/'concat.txt'
-        listing.write_text(''.join(f"file '{s['segment_id']}/core.mp4'\n" for s in plan['segments']),encoding='utf-8')
+        listing=folder/'master-frames.txt'
+        _no_links(folder)
+        if listing.exists() or listing.is_symlink():
+            _no_links(listing)
+        with listing.open('w', encoding='utf-8', newline='\n') as stream:
+            for segment in plan['segments']:
+                start, stop = segment['core']
+                left = segment['context'][0]
+                for index in range(start-left, stop-left):
+                    if time.monotonic() >= end:
+                        raise ProductionError('PRODUCTION_DEADLINE_EXCEEDED')
+                    stream.write(f"file '{segment['segment_id']}/frames/{index:06d}.png'\n")
         partial=folder/'movie.partial.mp4'
-        _run([ffmpeg,'-nostdin','-v','error','-f','concat','-safe','1','-i',str(listing),
+        if partial.exists() or partial.is_symlink():
+            _no_links(partial)
+        _run([ffmpeg,'-nostdin','-v','error','-r',str(rate),'-f','concat','-safe','1','-i',str(listing),
               '-vf',f'setpts=N*{rate.denominator}/({rate.numerator}*TB)',
               '-fps_mode','cfr','-enc_time_base',f'{rate.denominator}/{rate.numerator}',
               '-r',str(rate),
@@ -126,9 +138,19 @@ def run_sequence(bundle,plan,*,output_root,generator,seconds=300,max_new_segment
         measured=inspect_control(partial,check,timeout=max(1,int(end-time.monotonic())))
         if measured['frame_count']!=source['frame_count'] or measured['clock']!=source['clock']:
             raise ProductionError('PRODUCTION_FRAME_MAPPING')
+        for value in accepted:
+            segment = value['segment']
+            for index in range(segment['core'][0]-segment['context'][0],
+                               segment['core'][1]-segment['context'][0]):
+                if time.monotonic() >= end:
+                    raise ProductionError('PRODUCTION_DEADLINE_EXCEEDED')
+                frame = folder / segment['segment_id'] / 'frames' / f'{index:06d}.png'
+                if file_identity(frame)['sha256'] != value['frame_hashes'][index]:
+                    raise ProductionError('PRODUCTION_SOURCE_CHANGED')
         partial.replace(folder/'movie.mp4')
         value=seal({'plan_digest':plan['plan_digest'],'checkpoints':[v['checkpoint_digest'] for v in accepted],
                     'output':file_identity(folder/'movie.mp4'),'measured':measured,
+                    'encoding_source':'lossless_core_png',
                     'qualification_scope':plan['qualification_scope'],'motion_review':'not_reviewed',
                     'semantic_quality':'not_evaluated'},'receipt_digest')
         publish(complete,value)

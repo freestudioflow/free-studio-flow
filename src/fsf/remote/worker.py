@@ -61,10 +61,12 @@ def run_worker(bundle, *, output_root, approved_recipe, remaining_seconds=None):
             recipe = request["recipe"]
             environment = {}
             env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "SSL_CERT_FILE", "SSL_CERT_DIR") if k in os.environ}
-            missing_credentials=[]
+            credential_error=None
             for name in recipe["environment"]["credential_env_names"]:
-                if name not in request["policy"]["credential_env_names"] or name not in os.environ:
-                    missing_credentials.append(name)
+                if name not in request["policy"]["credential_env_names"]:
+                    credential_error="REMOTE_CREDENTIAL_NOT_AUTHORIZED"
+                elif not os.environ.get(name):
+                    credential_error=credential_error or "REMOTE_CREDENTIAL_MISSING"
                 else:env[name] = os.environ[name]
             env.update(FSF_REMOTE_DEPTH="1", OMP_NUM_THREADS=str(request["policy"]["cpu"]),
                        OPENBLAS_NUM_THREADS=str(request["policy"]["cpu"]))
@@ -122,8 +124,8 @@ def run_worker(bundle, *, output_root, approved_recipe, remaining_seconds=None):
             error = None
             artifacts = []
             try:
-                if missing_credentials:
-                    raise RemoteError("REMOTE_CREDENTIAL_MISSING")
+                if credential_error:
+                    raise RemoteError(credential_error)
                 if recipe["environment"]["os"] not in {"any", platform.system().lower()}:
                     raise RemoteError("REMOTE_OS_UNSUPPORTED")
                 if not platform.python_version().startswith(recipe["environment"]["python"]):

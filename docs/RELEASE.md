@@ -12,6 +12,14 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Candidate notes (0.1.0rc11)
+
+Source version `0.1.0rc11` is prepared for review. The latest published version
+above remains rc10. Use matching parent and worker builds. The README rc11
+section lists additions and accepted limits, including synthetic media scope,
+pending neural model A/B and hardware qualification, unqualified write-volume
+bounds across runs and the unresolved initial Docker sampler failure.
+
 ## Release notes (0.1.0rc10)
 
 Version `0.1.0rc10` is available on PyPI and GitHub Releases, published from

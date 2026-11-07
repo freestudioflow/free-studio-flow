@@ -35,6 +35,8 @@ def test_materialized_windows_resume_and_use_actual_generated_predecessor(tmp_pa
     assert paused['status']=='paused' and len(calls)==2
     completed=run_sequence(bundle,plan,output_root=out,generator=backend,allow_probe=True)
     assert completed['status']=='completed' and completed['measured']['frame_count']==103
+    assert completed['encoding_source']=='lossless_core_png'
+    assert completed['measured']['clock']==spec['clock']
     assert len(calls)==len(set(calls))==len(plan['segments'])
     reused=run_sequence(bundle,plan,output_root=out,generator=backend,allow_probe=True)
     assert reused['new_segments']==0 and reused['output']==completed['output']

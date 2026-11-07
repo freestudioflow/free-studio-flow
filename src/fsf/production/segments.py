@@ -20,26 +20,8 @@ def compile_segments(source, capability, *, shot_id, policy_digest, qualificatio
     if [source["width"], source["height"]] not in cap["dimensions"]:
         raise ProductionError("PRODUCTION_PREPROCESS_REQUIRED")
     limit, step, overlap = cap["max_frames"], cap["frame_step"], cap["overlap_frames"]
-    if overlap >= limit or (cap["continuation"] == "previous_frame" and overlap < 1):
-        raise ProductionError("PRODUCTION_CAPABILITY_UNSUPPORTED")
-    segments, start = [], 0
-    while start < source["frame_count"]:
-        left = max(0, start-overlap)
-        # Legal model frame lengths are 1 + k*frame_step.
-        length = 1 + ((limit-1)//step)*step
-        end = min(source["frame_count"], left+length)
-        if end <= start:
-            raise ProductionError("PRODUCTION_CAPABILITY_UNSUPPORTED")
-        real_length = end-left
-        padding = (1-real_length) % step
-        if padding and cap["tail_padding"] != "repeat_last_explicit":
-            raise ProductionError("PRODUCTION_TAIL_UNSUPPORTED")
-        sid = f"segment_{len(segments)+1:06d}"
-        segments.append({"segment_id": sid, "core": [start,end], "context": [left,end],
-                         "padding_frames": padding, "model_frames": real_length+padding,
-                         "depends_on": [segments[-1]["segment_id"]]
-                         if segments and cap["continuation"] == "previous_frame" else []})
-        start = end
+    segments = map_windows(source["frame_count"], limit, step, overlap,
+                           cap["continuation"], cap["tail_padding"])
     result = seal({"schema_version": "fsf_production_segments_v1", "logical_shot_id": shot_id,
                    "source_digest": source["source_digest"], "source_sha256": source["sha256"],
                    "capability_digest": cap["capability_digest"], "policy_digest": policy_digest,
@@ -47,6 +29,30 @@ def compile_segments(source, capability, *, shot_id, policy_digest, qualificatio
                    "qualification_scope":"probe_only" if qualification_probe else "qualified",
                    "segments": segments, "generated_frames": sum(s["model_frames"] for s in segments)}, "plan_digest")
     return validate_segments(result)
+
+
+def map_windows(frame_count, limit, step, overlap, continuation, tail_padding):
+    if overlap >= limit or (continuation == "previous_frame" and overlap < 1):
+        raise ProductionError("PRODUCTION_CAPABILITY_UNSUPPORTED")
+    segments, start = [], 0
+    while start < frame_count:
+        left = max(0, start-overlap)
+        # Legal model frame lengths are 1 + k*frame_step.
+        length = 1 + ((limit-1)//step)*step
+        end = min(frame_count, left+length)
+        if end <= start:
+            raise ProductionError("PRODUCTION_CAPABILITY_UNSUPPORTED")
+        real_length = end-left
+        padding = (1-real_length) % step
+        if padding and tail_padding != "repeat_last_explicit":
+            raise ProductionError("PRODUCTION_TAIL_UNSUPPORTED")
+        sid = f"segment_{len(segments)+1:06d}"
+        segments.append({"segment_id": sid, "core": [start,end], "context": [left,end],
+                         "padding_frames": padding, "model_frames": real_length+padding,
+                         "depends_on": [segments[-1]["segment_id"]]
+                         if segments and continuation == "previous_frame" else []})
+        start = end
+    return segments
 
 
 def validate_segments(plan):

@@ -189,8 +189,10 @@ def call(value):
     if not owner:raise RemoteError('REMOTE_KAGGLE_OWNER')
     # Unique immutable notebook per intent; no inherited Secret bindings needed.
     settings=profile['settings']
+    from fsf.remote.destination import authorize_create,resolve
+    authorize_create(profile,owner=owner)
     if settings.get('activation_mode','api_push')!='api_push':raise RemoteError('REMOTE_KAGGLE_ACTIVATION_MODE')
-    fixed=settings.get('native_notebook')
+    fixed=resolve(profile)['slug']
     projected={**profile,'settings':{k:v for k,v in settings.items() if k not in {'worker_notebook','activation_mode','native_notebook'}}}
     if fixed:projected['settings']['worker_notebook']=fixed
     expected=metadata(request,projected,owner);ref=expected['id'];operation=value['operation']

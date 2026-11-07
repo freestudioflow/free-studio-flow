@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 from fsf.remote.contracts import RemoteError,digest,write_json
 from fsf.core.edit_store import read_json
@@ -70,13 +71,16 @@ def notebook(request,locator):
 
 def metadata(request,profile,owner):
     gpu=request['policy']['gpu']
-    slug=profile['settings'].get('worker_notebook','fsf-worker-'+request['request_digest'][:24])
+    from fsf.remote.destination import resolve,require_secret_capability
+    destination=resolve(profile);require_secret_capability(profile)
+    slug=destination['slug'] or 'fsf-worker-'+request['request_digest'][:24]
     value={'id':owner+'/'+slug,'title':slug,
         'code_file':'worker.ipynb','language':'python','kernel_type':'notebook','is_private':True,
         'enable_gpu':gpu,'enable_tpu':False,'enable_internet':True,
         'machine_shape':profile['settings']['accelerator'] if gpu else '',
         'dataset_sources':[],'competition_sources':[],'kernel_sources':[]}
     if profile['settings'].get('docker_image'):value['docker_image']=profile['settings']['docker_image']
+    if profile.get('destination'):value['model_sources']=destination['model_sources']
     return value
 
 
@@ -100,7 +104,7 @@ class V2Adapter:
         if self.profile['transport']=='ssh' and self._native():return self._native_ssh().prepare(request,directory)
         if self.profile['transport']=='local':
             from fsf.remote.transports import LocalAdapter
-            base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments'}}
+            base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments','destination'}}
             base['schema_version']='fsf_remote_profile_v1'
             LocalAdapter(base).prepare(None,None,None)
         elif self.profile['transport']=='ssh':self._ssh().prepare(None,None,None)
@@ -108,7 +112,7 @@ class V2Adapter:
 
     def _ssh(self):
         from fsf.remote.transports import SshAdapter
-        base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments'}}
+        base={k:v for k,v in self.profile.items() if k not in {'store_binding','gpu_limits','group_limits','allocation','allow_recipe_experiments','destination'}}
         base['schema_version']='fsf_remote_profile_v1'
         return SshAdapter(base)
 
@@ -119,11 +123,19 @@ class V2Adapter:
         payload={'operation':operation,'request':request,'locator':locator,'profile':self.profile,'directory':str(directory),'remote':remote}
         if native:payload['store_config']=self.store_config
         write_json(directory/'provider-v2-call.json',payload)
+        response=directory/'provider-v2-response.json'
+        response.unlink(missing_ok=True)
+        from fsf.remote.diagnostics import now,record
+        started=now();clock=time.monotonic()
         with kaggle_credential_environment() as env:
             result=run_safe_subprocess([sys.executable,'-m','fsf.remote.kaggle_native' if native else 'fsf.remote.kaggle_v2_api',str(directory/'provider-v2-call.json')],
-                env=env,inherit_env=False,timeout_seconds=300 if native else 120,output_limit_bytes=16384)
+                env=env,inherit_env=False,timeout_seconds=300 if native else 120,output_limit_bytes=16*1024*1024)
+            record(directory,request_id=request['request_digest'],phase=operation,started_at=started,started_clock=clock,
+                   operation_status='failed' if result.returncode or result.timed_out else 'succeeded',
+                   submission_status='unknown' if operation=='submit' else 'not_attempted',result=result,env=env,
+                   code='REMOTE_KAGGLE_API_FAILED' if result.returncode or result.timed_out else None)
         if result.returncode or result.timed_out:raise RemoteError('REMOTE_KAGGLE_API_FAILED')
-        reply=read_json(directory/'provider-v2-response.json')
+        reply=read_json(response)
         if not reply['ok']:raise RemoteError(reply['code'])
         return reply['result']
 
@@ -154,6 +166,8 @@ class V2Adapter:
         env={k:os.environ[k] for k in ('PATH','SystemRoot','WINDIR','TEMP','TMP','HOME','USERPROFILE',
             'AWS_PROFILE','AWS_CONFIG_FILE','AWS_SHARED_CREDENTIALS_FILE','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN','AWS_DEFAULT_REGION','AWS_REGION','AWS_CA_BUNDLE') if k in os.environ}
         env['FSF_ARTIFACT_STORE_CONFIG']=self.store_config
+        if request['recipe']['schema_version']=='fsf_remote_recipe_v4' and os.environ.get('FSF_REMOTE_VERIFIERS_FILE'):
+            env['FSF_REMOTE_VERIFIERS_FILE']=os.environ['FSF_REMOTE_VERIFIERS_FILE']
         for name in request['recipe']['environment']['credential_env_names']:
             if name in request['policy']['credential_env_names'] and name in os.environ:env[name]=os.environ[name]
         target=Path(self.profile['settings']['worker_root']);target.mkdir(exist_ok=True)
