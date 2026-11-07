@@ -11,18 +11,18 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc11`**.
 
-Latest verified PyPI release: **[`0.1.0rc10`](https://pypi.org/project/free-studio-flow/0.1.0rc10/)**,
-published from tag **[`v0.1.0rc10`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc10)**
-at commit `e2c2d0471d5597b32057bb965dff6757edbddc2e`.
+Latest verified PyPI release: **[`0.1.0rc11`](https://pypi.org/project/free-studio-flow/0.1.0rc11/)**,
+published from tag **[`v0.1.0rc11`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc11)**
+at commit `e49d48d34992ceac4ab7c85ea48a4c7b48ca6e21`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc10"
+python -m pip install "free-studio-flow==0.1.0rc11"
 ```
 <!-- pypi-release-status:end -->
 
 ### Additions and accepted limits in rc11
 
-The rc11 source is a release candidate undergoing review.
+Version 0.1.0rc11 is published on PyPI and GitHub Releases.
 
 - Worker credential isolation, redacted diagnostics, destination policies and
   operator-configured verifiers.
@@ -42,7 +42,7 @@ The rc11 source is a release candidate undergoing review.
 - An earlier Docker sampler failure passed isolated and full reruns. Its
   underlying cause remains unresolved.
 
-The published rc10 package includes the earlier releases and the production
+The published rc11 package includes the earlier releases and the production
 and extension features described below.
 
 ### Additions in rc10

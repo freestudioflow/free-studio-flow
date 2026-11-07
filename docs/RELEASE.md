@@ -5,17 +5,25 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc10`**, available on PyPI.
+The current published pre-release is **`0.1.0rc11`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
-## Candidate notes (0.1.0rc11)
+## Release notes (0.1.0rc11)
 
-Source version `0.1.0rc11` is prepared for review. The latest published version
-above remains rc10. Use matching parent and worker builds. The README rc11
+Version `0.1.0rc11` is published from tag `v0.1.0rc11` at commit
+`e49d48d34992ceac4ab7c85ea48a4c7b48ca6e21`. GitHub and PyPI serve
+the same verified files. Use matching parent and worker builds.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| free_studio_flow-0.1.0rc11-py3-none-any.whl | 593777 | `6d8f29c4c24b4451e9a1f69cb6914b0ee722f9f2ef4e5af567ac10556d61a16f` |
+| free_studio_flow-0.1.0rc11.tar.gz | 803083 | `9d697a401709ef4d1394e215a1eee56cb9b401e7ab718f980ee680c8396646b7` |
+
+ The README rc11
 section lists additions and accepted limits, including synthetic media scope,
 pending neural model A/B and hardware qualification, unqualified write-volume
 bounds across runs and the unresolved initial Docker sampler failure.
