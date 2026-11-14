@@ -36,6 +36,10 @@ def main(argv=None):
         child.add_argument("--recheck",action="store_true")
     verify=commands.add_parser("verify",help="Verify a collected model artifact and receipt")
     verify.add_argument("bundle")
+    unpack=commands.add_parser("unpack",help="Verify and unpack a bounded ZIP artifact")
+    unpack.add_argument("archive")
+    for flag in ("destination","limits","sha256"):
+        unpack.add_argument("--"+flag,required=True,action=_Once)
     try:
         args=parser.parse_args(argv)
         if args.operation=="setup":
@@ -73,6 +77,9 @@ def main(argv=None):
                 with connection_attempt(profile,binding,_root(state_root),recheck=args.recheck),credential_scope(profile,binding):
                     _http(profile,"GET",route,deadline=time.monotonic()+profile["timeout_seconds"])
                 result.update(authenticated=True,reachable=True)
+        elif args.operation=="unpack":
+            from fsf.remote.streaming import extract_archive
+            result=extract_archive(args.archive,args.destination,read_json(args.limits),args.sha256)
         elif args.operation=="verify":
             receipt=verify_receipt(args.bundle)
             result={"capability":receipt["capability"],"receipt_digest":receipt["receipt_digest"],"quality":receipt["quality"],"review":receipt["review"]}

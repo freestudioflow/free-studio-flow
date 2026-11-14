@@ -48,7 +48,8 @@ def file_identity(path, limit=MAX_BYTES):
     with _open_reader(path) as stream:
         if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
             raise ProductionError("PRODUCTION_SOURCE_INVALID")
-        while block := stream.read(1024*1024):
+        from fsf.production.resources import read_chunk_bytes
+        while block := stream.read(read_chunk_bytes()):
             count += len(block)
             if count > limit:
                 raise ProductionError("PRODUCTION_SOURCE_LIMIT")

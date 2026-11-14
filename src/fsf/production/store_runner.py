@@ -69,7 +69,51 @@ def _expired_call(exc, deadline):
     return isinstance(exc,ProductionError) and exc.code=='PRODUCTION_DEADLINE_EXCEEDED' and time.monotonic()>=deadline
 
 
-def run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality_gate=None):
+def run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality_gate=None,
+                    resource_governor=None):
+    if resource_governor is None:
+        return _run_store_batch(plan, store=store, driver=driver, seconds=seconds,
+                                delivery=delivery, quality_gate=quality_gate)
+    from fsf.production.resources import Governor, ResourcePause
+    if not isinstance(resource_governor, Governor):
+        raise ProductionError("PRODUCTION_RESOURCE_PROFILE")
+    validate_plan(plan)
+    integer(seconds, 1, 5400)
+    if type(delivery) is not bool:
+        raise ProductionError('PRODUCTION_INVALID')
+    execution = store.execution(plan)
+    binding = digest(resource_governor.profile)
+    with store.transaction():
+        prior = store.db.execute("SELECT payload FROM events WHERE execution=? AND kind='resource_policy_bound'",
+                                 (execution,)).fetchone()
+        if prior is not None and _load(prior[0]) != {"digest": binding}:
+            raise ProductionError("PRODUCTION_RESOURCE_CHANGED")
+        if prior is None:
+            store._event("resource_policy_bound", execution, payload={"digest": binding})
+    deadline = time.monotonic()+seconds
+    with resource_governor.activate():
+        while True:
+            try:
+                result = _run_store_batch(plan, store=store, driver=driver,
+                                          seconds=max(1, int(deadline-time.monotonic())),
+                                          delivery=delivery, quality_gate=quality_gate)
+                break
+            except ProductionError:
+                if resource_governor.reason is None:
+                    raise
+                if resource_governor.reason not in {"measurement_unavailable", "job_enforcement_unavailable"}:
+                    if resource_governor.recover(deadline=deadline):
+                        continue
+                result = {"status": "paused_resource", "plan_digest": plan["plan_digest"],
+                          "reason": resource_governor.reason}
+                break
+    resource_governor._record({"state": result["status"], "reason": resource_governor.reason}, force=True)
+    return {**result, "resource_policy_digest": binding,
+            "peak_tree_rss_bytes": resource_governor.peak_rss,
+            "peak_tree_commit_bytes": resource_governor.peak_commit}
+
+
+def _run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality_gate=None):
     validate_plan(plan)
     integer(seconds, 1, 5400)
     if type(delivery) is not bool:
@@ -101,6 +145,10 @@ def run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality
             db.execute("UPDATE tasks SET status='rejected' WHERE execution=? AND status='repair_wait'", (execution,))
         active_position = -1
         while time.monotonic() < deadline:
+            from fsf.production.resources import current_governor
+            governor = current_governor()
+            if governor is not None:
+                governor.admit(required_commit_bytes=governor.profile["task_commit_bytes"], deadline=deadline)
             if db.execute('SELECT paused FROM executions WHERE id=?', (execution,)).fetchone()[0]:
                 return {'status': 'paused', 'plan_digest': plan['plan_digest']}
             row = store.next_ready(execution)
@@ -248,6 +296,10 @@ def run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality
                         'file_check_mode': getattr(driver,'last_file_check_mode','driver_defined'),
                         'human_review': 'not_reviewed'}
             for row in rows:
+                from fsf.production.resources import current_governor
+                governor = current_governor()
+                if governor is not None:
+                    governor.admit(required_commit_bytes=governor.profile["task_commit_bytes"], deadline=deadline)
                 if time.monotonic() >= deadline:
                     break
                 row = store._task_row(row)

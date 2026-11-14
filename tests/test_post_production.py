@@ -106,6 +106,53 @@ def test_verified_sources_and_post_plan_shape(bundle):
     assert all(s.get("tool", "").startswith("pdx.media.") for s in plan["steps"] if s["kind"] == "tool")
 
 
+def test_versioned_layers_and_reference_comparison(bundle, tmp_path):
+    root, edit, configs = bundle
+    edit_file = write(tmp_path / "edit.json", edit)
+    config = write(tmp_path / "sources.json", configs)
+    layer = dict(layer_id="pip", clip_id="C01", source_id="S02", source_in=0, start_frame=4,
+                 end_frame=12, x=0, y=0, width=80, height=60, z=1)
+    patch_file = write(tmp_path / "layer.json", {
+        **patch(edit, {"op": "set_video_layers", "layers": [layer, {
+            **layer, "layer_id": "top", "source_id": "S03", "width": 40, "height": 32, "z": 2,
+        }]}), "schema_version": "fsf_edit_patch_v2",
+    })
+    revised = json.loads(cli("edit", "patch", edit_file, "--patch", patch_file).stdout)["result"]
+    assert revised["schema_version"] == "fsf_edit_spec_v2"
+    assert cli("edit", "patch", edit_file, "--patch", patch_file, check=False).returncode != 0
+    plan = tmp_path / "post.json"
+    cli("edit", "plan", edit_file, "--out", plan, "--width", 320, "--height", 180)
+    result = json.loads(cli("execute", plan, "--out", tmp_path / "post", "--source-executions", config).stdout)
+    assert result["success"] and not any(result["generation_dispatches"].values())
+    folder = tmp_path / "post" / result["artifact_directory"]
+    assert verify_post_receipt(folder)
+    rgb = subprocess.check_output([require_ffmpeg(), "-v", "error", "-i", str(folder / "movie.mp4"),
+                                   "-frames:v", "13", "-vf", "format=rgb24", "-threads", "1", "-f", "rawvideo", "-"])
+    from PIL import Image, ImageStat
+
+    stride = 320 * 180 * 3
+    for frame in range(13):
+        image = Image.frombytes("RGB", (320, 180), rgb[frame * stride:(frame + 1) * stride])
+        top = ImageStat.Stat(image.crop((2, 2, 38, 30))).mean
+        bottom = ImageStat.Stat(image.crop((42, 2, 78, 56))).mean
+        assert top.index(max(top)) == (2 if 4 <= frame < 12 else 0)
+        assert bottom.index(max(bottom)) == (1 if 4 <= frame < 12 else 0)
+    assert (root / "generation_count.txt").read_text() == "3"
+    from fsf.production.contracts import seal
+    reference = write(tmp_path / "reference.json", seal({
+        "schema_version": "reference_analysis_v1", "source": {"sha256": "a" * 64},
+        "shots": [{"range": [0, 2]}],
+        "timeline": {"pts": [0, 1000], "end_pts": 3000, "time_base": [1, 24000]},
+    }, "analysis_digest"))
+    mapping = write(tmp_path / "mapping.json", [{"reference_shot": "shot-1", "clip_id": "C01"}])
+    output = tmp_path / "comparison.json"
+    cli("reference", "compare", reference, "--edit", edit_file, "--spec", mapping, "--out", output)
+    report = json.loads(output.read_text())
+    assert report["edit_digest"] == revised["edit_digest"]
+    assert report["matches"][0]["duration_ratio"] == [16, 1]
+    assert report["metric_geometry"]["status"] == "unknown"
+
+
 def test_cli_three_edits_preview_resume_and_revocation(bundle, tmp_path):
     root, edit, configs = bundle
     before = {p.relative_to(root).as_posix(): file_sha(p) for p in root.rglob("*") if p.is_file()}

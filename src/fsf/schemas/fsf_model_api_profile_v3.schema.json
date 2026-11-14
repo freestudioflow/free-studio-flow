@@ -1,0 +1,444 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "fsf_model_api_profile_v3"
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "protocol": {
+      "enum": [
+        "json_http_v1",
+        "openai_chat_v1",
+        "gemini_content_v1",
+        "bedrock_converse_v1"
+      ]
+    },
+    "capability": {
+      "enum": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "upscale"
+      ]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "authorized": {
+      "type": "boolean"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "key_env": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "region": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "allow_loopback": {
+      "type": "boolean"
+    },
+    "artifact_hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "maxItems": 16
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5400
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parameter_schema": {
+      "type": "object"
+    },
+    "http": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "auth_header": {
+              "enum": [
+                "Authorization",
+                "x-goog-api-key",
+                "none"
+              ]
+            },
+            "routes": {
+              "type": "object",
+              "properties": {
+                "submit": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fetch": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reconcile": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cancel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "check": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "submit",
+                "status",
+                "fetch",
+                "reconcile",
+                "cancel",
+                "check"
+              ],
+              "additionalProperties": false
+            },
+            "body": {
+              "type": "object"
+            },
+            "response_mode": {
+              "enum": [
+                "text",
+                "base64",
+                "url",
+                "binary"
+              ]
+            },
+            "result_pointer": {
+              "type": "string"
+            },
+            "job_id_pointer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status_pointer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status_map": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            }
+          },
+          "required": [
+            "auth_header",
+            "routes",
+            "body",
+            "response_mode",
+            "result_pointer",
+            "job_id_pointer",
+            "status_pointer",
+            "status_map"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "suffix": {
+          "type": "string",
+          "pattern": "^\\.[a-z0-9]{1,8}$"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 68719476736
+        },
+        "max_dimension": {
+          "type": "integer",
+          "minimum": 32
+        },
+        "max_duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "media_type",
+        "suffix",
+        "max_bytes",
+        "max_dimension",
+        "max_duration_seconds"
+      ],
+      "additionalProperties": false
+    },
+    "observation_timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5400,
+      "description": "Per status/fetch/reconcile/cancel budget; does not renew the original submission budget. Default 60 seconds when absent."
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "archive_compressed_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "archive_members": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "archive_unpacked_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "control_response_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "disk_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "disk_reserve_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "http_request_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "input_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "manifest_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "manifest_line_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "member_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "pending_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "process_tree_commit_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "process_tree_rss_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "worker_package_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "schema_version": {
+          "const": "fsf_resource_limits_v1"
+        }
+      },
+      "required": [
+        "archive_compressed_bytes",
+        "archive_members",
+        "archive_unpacked_bytes",
+        "control_response_bytes",
+        "disk_bytes",
+        "disk_reserve_bytes",
+        "http_request_bytes",
+        "input_bytes",
+        "manifest_bytes",
+        "manifest_line_bytes",
+        "member_bytes",
+        "output_bytes",
+        "pending_bytes",
+        "process_tree_commit_bytes",
+        "process_tree_rss_bytes",
+        "schema_version",
+        "seconds",
+        "worker_package_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "upload_prefix": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 256
+    },
+    "output_sha256_pointer": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 1024
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile_id",
+    "protocol",
+    "capability",
+    "model",
+    "authorized",
+    "base_url",
+    "key_env",
+    "region",
+    "allow_loopback",
+    "artifact_hosts",
+    "timeout_seconds",
+    "max_tokens",
+    "parameter_schema",
+    "http",
+    "output",
+    "limits",
+    "upload_prefix",
+    "output_sha256_pointer"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fsf_model_api_profile_v3"
+}

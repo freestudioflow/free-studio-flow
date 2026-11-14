@@ -9,6 +9,7 @@ import sys
 import time
 
 from fsf.remote.contracts import RemoteError,digest,write_json
+import re
 from fsf.core.edit_store import read_json
 from fsf.remote.v2 import validate_profile,validate_request
 
@@ -130,13 +131,24 @@ class V2Adapter:
         with kaggle_credential_environment() as env:
             result=run_safe_subprocess([sys.executable,'-m','fsf.remote.kaggle_native' if native else 'fsf.remote.kaggle_v2_api',str(directory/'provider-v2-call.json')],
                 env=env,inherit_env=False,timeout_seconds=300 if native else 120,output_limit_bytes=16*1024*1024)
+            code='REMOTE_KAGGLE_API_FAILED'
+            reply=None
+            if not result.timed_out and result.returncode in (0,2):
+                try:
+                    reply=read_json(response)
+                except (ValueError,OSError):
+                    pass
+                if (isinstance(reply,dict) and set(reply)=={'ok','code'} and reply['ok'] is False
+                        and isinstance(reply['code'],str)
+                        and re.fullmatch(r'(?:REMOTE|STREAM|API)_[A-Z0-9_]{1,95}',reply['code'])):
+                    code=reply['code']
+            success=(result.returncode==0 and not result.timed_out and isinstance(reply,dict)
+                     and reply.get('ok') is True and 'result' in reply)
             record(directory,request_id=request['request_digest'],phase=operation,started_at=started,started_clock=clock,
-                   operation_status='failed' if result.returncode or result.timed_out else 'succeeded',
+                   operation_status='succeeded' if success else 'failed',
                    submission_status='unknown' if operation=='submit' else 'not_attempted',result=result,env=env,
-                   code='REMOTE_KAGGLE_API_FAILED' if result.returncode or result.timed_out else None)
-        if result.returncode or result.timed_out:raise RemoteError('REMOTE_KAGGLE_API_FAILED')
-        reply=read_json(response)
-        if not reply['ok']:raise RemoteError(reply['code'])
+                   code=None if success else code)
+        if not success:raise RemoteError(code)
         return reply['result']
 
     def fetch_into_store(self,request,remote,directory):

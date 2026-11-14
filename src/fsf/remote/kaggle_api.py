@@ -14,9 +14,13 @@ from fsf.core.edit_store import read_json
 from fsf.remote.contracts import RemoteError, MAX_BUNDLE_BYTES, sha, write_json
 
 
-def _download(url, target):
+def _download(url, target, *, limits=None, expected_sha=None, expected_size=None):
     import requests
     # Signed storage URLs must still be HTTPS on an explicit platform allowlist.
+    if limits is not None:
+        import time
+        from fsf.remote.streaming import content_length, copy_stream
+        deadline=time.monotonic()+limits["seconds"]
     for _ in range(4):
         p = urlsplit(url)
         host = (p.hostname or "").lower()
@@ -28,6 +32,27 @@ def _download(url, target):
             url = response.headers.get("Location", "")
             response.close()
             continue
+        if limits is not None:
+            from fsf.remote.streaming import download
+            with response:
+                response.raise_for_status()
+                # urllib3 exposes duplicate headers via get_all and raw.read1
+                # preserves wire encoding and avoids automatic decompression.
+                if expected_size is not None:
+                    if expected_size > limits["archive_compressed_bytes"]:
+                        raise RemoteError("STREAM_SIZE_LIMIT")
+                    declared=content_length(response.raw.headers)
+                    if declared is not None and declared!=expected_size:
+                        raise RemoteError("STREAM_LENGTH_MISMATCH")
+                    identity=copy_stream(response.raw,None,maximum=expected_size,declared=expected_size,
+                                         expected_sha=expected_sha,deadline=deadline,limits=limits)
+                    return identity
+                target=Path(target)
+                staged=download(response.raw,target.parent,limits,deadline,expected_sha,
+                                maximum=limits["archive_compressed_bytes"])
+                try:os.rename(staged,target)
+                finally:staged.unlink(missing_ok=True)
+                return
         response.raise_for_status()
         try:
             if int(response.headers.get("Content-Length", 0)) > MAX_BUNDLE_BYTES:

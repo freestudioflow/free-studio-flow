@@ -13,6 +13,17 @@ from fsf.core.edit_store import read_json
 from fsf.remote.contracts import RemoteError,digest,sha,write_json,safe_path,seal
 from fsf.remote.bundle import pack,unpack
 from fsf.remote.native_store import NativeStore,SCHEMA
+from fsf.remote import streaming
+
+
+@contextlib.contextmanager
+def _dataset_phase(code):
+    try:
+        yield
+    except RemoteError:
+        raise
+    except Exception:
+        raise RemoteError(code) from None
 
 def prepare(request,store,directory):
     """Freeze only this request's inputs, not the entire host staging folder."""
@@ -27,6 +38,17 @@ def prepare(request,store,directory):
         store.get(ref,output=target,state_root=directory)
         paths.append(name)
     bundle=directory/'native-input.zip'
+    if 'limits' in request:
+        if not bundle.exists():
+            streaming.pack_archive(folder,paths,bundle,request['limits'])
+        else:
+            with tempfile.TemporaryDirectory(dir=directory) as temp:
+                target=Path(temp)/'unpacked'
+                streaming.extract_archive(bundle,target,request['limits'],None)
+                names={p.relative_to(target).as_posix() for p in target.rglob('*') if p.is_file()}
+                if names!=set(paths) or any(sha(target/name)!=sha(folder/name) for name in names):
+                    raise RemoteError('REMOTE_KAGGLE_POLICY')
+        raise RemoteError('REMOTE_KAGGLE_NATIVE_INPUT_TOO_LARGE')
     if not bundle.exists():pack(folder,sorted(set(paths)),bundle)
     else:
         # Do not trust a stale or manually replaced prepared bundle.
@@ -58,10 +80,18 @@ def external_notebook(request,bundle_sha,slug):
     bootstrap=resources.files('fsf.tools').joinpath('remote_bootstrap_native.py').read_bytes()
     code='import base64,hashlib,pathlib\n'
     code+='src=pathlib.Path('+repr('/kaggle/input/'+slug+'/payload.bin')+')\n'
-    code+='data=src.read_bytes()\n'
-    code+='if hashlib.sha256(data).hexdigest()!='+repr(bundle_sha)+':\n raise SystemExit(2)\n'
-    code+="b=pathlib.Path('/tmp/fsf-native-input.zip');b.write_bytes(data)\n"
-    code+='scope={"BUNDLE":str(b),"BUNDLE_SHA":'+repr(bundle_sha)+',"DEADLINE":'+str(request['policy']['deadline_seconds'])+'}\n'
+    if 'limits' in request:
+        code+='candidates=[p for p in pathlib.Path("/kaggle/input").glob('+repr('**/'+slug+'/payload.bin')+') if p.is_file()]\n'
+        code+='if len(candidates)!=1:\n print("REMOTE_KAGGLE_MOUNT_NOT_UNIQUE",len(candidates))\n raise SystemExit(2)\n'
+        code+='b=candidates[0]\n'
+        scope={key:request[key] for key in ('limits','limits_digest','request_digest')}
+        code+='scope='+repr(scope)+'\n'
+        code+='scope.update(BUNDLE=str(b), BUNDLE_SHA='+repr(bundle_sha)+', DEADLINE='+str(request['policy']['deadline_seconds'])+')\n'
+    else:
+        code+='data=src.read_bytes()\n'
+        code+='if hashlib.sha256(data).hexdigest()!='+repr(bundle_sha)+':\n raise SystemExit(2)\n'
+        code+="b=pathlib.Path('/tmp/fsf-native-input.zip');b.write_bytes(data)\n"
+        code+='scope={"BUNDLE":str(b),"BUNDLE_SHA":'+repr(bundle_sha)+',"DEADLINE":'+str(request['policy']['deadline_seconds'])+'}\n'
     code+='exec(compile(base64.b64decode('+repr(base64.b64encode(bootstrap).decode())+'),"fsf_native_bootstrap","exec"),scope)\n'
     return {'nbformat':4,'nbformat_minor':5,'metadata':{'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},
         'kaggle':{'isGpuEnabled':request['policy']['gpu'],'isInternetEnabled':True}},
@@ -100,7 +130,26 @@ def _private_flag(value):
             if found is not None:return found
     return None
 
-def publish_private_dataset(api,ref,bundle,directory):
+def verify_dataset_file(api,ref,bundle,limits):
+    from kagglesdk.datasets.types.dataset_api_service import ApiDownloadDatasetRequest
+    from fsf.remote.kaggle_api import _download
+
+    query=ApiDownloadDatasetRequest()
+    query.owner_slug,query.dataset_slug=ref.split('/')
+    query.file_name='payload.bin'
+    try:
+        with api.build_kaggle_client() as client:
+            with client.datasets.dataset_api_client.download_dataset(query) as response:
+                url=response.url
+        return _download(url,None,limits=limits,expected_sha=sha(bundle),
+                         expected_size=bundle.stat().st_size)
+    except RemoteError:
+        raise
+    except Exception:
+        raise RemoteError('REMOTE_KAGGLE_DATASET_VERIFY') from None
+
+
+def publish_private_dataset(api,ref,bundle,directory,*,limits=None):
     bundle=Path(bundle)
     try:existing=api.dataset_status(ref)
     except Exception:existing=None
@@ -112,22 +161,38 @@ def publish_private_dataset(api,ref,bundle,directory):
         write_json(folder/'dataset-metadata.json',{'title':ref.split('/',1)[1],'id':ref,
             'licenses':[{'name':'other'}],'isPrivate':True,
             'description':'Private execution payload. Each included file retains its existing ownership and license. No public redistribution rights are granted by this transport metadata.'})
-        created=api.dataset_create_new(str(folder),public=False,quiet=True,convert_to_csv=False)
-        if getattr(created,'error',None):raise RemoteError('REMOTE_KAGGLE_DATASET')
-    else:
+        with _dataset_phase('REMOTE_KAGGLE_DATASET_CREATE'):
+            created=api.dataset_create_new(str(folder),public=False,quiet=True,convert_to_csv=False)
+            if getattr(created,'error',None):raise RemoteError('REMOTE_KAGGLE_DATASET_CREATE')
+    elif limits is None:
         listed=api.dataset_list_files(ref);rows=list(getattr(listed,'files',None) or [])
         if (len(rows)!=1 or getattr(rows[0],'name',None)!='payload.bin'
                 or int(getattr(rows[0],'size',-1))!=bundle.stat().st_size):
             raise RemoteError('REMOTE_KAGGLE_DATASET')
-    deadline=time.monotonic()+90
-    while True:
-        state=str(api.dataset_status(ref)).lower()
-        if state=='ready':break
-        if state in {'error','failed'} or time.monotonic()>=deadline:raise RemoteError('REMOTE_KAGGLE_DATASET')
-        time.sleep(3)
+    with _dataset_phase('REMOTE_KAGGLE_DATASET_READY'):
+        deadline=time.monotonic()+90
+        while True:
+            state=str(api.dataset_status(ref)).lower()
+            if state=='ready':break
+            if state in {'error','failed'} or time.monotonic()>=deadline:
+                raise RemoteError('REMOTE_KAGGLE_DATASET_READY')
+            time.sleep(3)
     meta_dir=Path(directory)/'external-metadata';meta_dir.mkdir(exist_ok=True)
-    api.dataset_metadata(ref,str(meta_dir))
+    with _dataset_phase('REMOTE_KAGGLE_DATASET_VERIFY'):
+        api.dataset_metadata(ref,str(meta_dir))
     if _private_flag(read_json(meta_dir/'dataset-metadata.json')) is not True:raise RemoteError('REMOTE_KAGGLE_POLICY')
+    if limits is not None:
+        with _dataset_phase('REMOTE_KAGGLE_DATASET_VERIFY'):
+            listed=api.dataset_list_files(ref);rows=list(getattr(listed,'files',None) or [])
+        if len(rows)!=1 or getattr(rows[0],'name',None)!='payload.bin':
+            raise RemoteError('REMOTE_KAGGLE_DATASET')
+        size=getattr(rows[0],'size',-1)
+        if type(size) is not int or size not in (-1,bundle.stat().st_size):
+            raise RemoteError('REMOTE_KAGGLE_DATASET')
+        identity=verify_dataset_file(api,ref,bundle,limits)
+        write_json(Path(directory)/'dataset-verification.json',{
+            'reported_size':None if size==-1 else size,'identity':identity,
+            'private':True,'reused':existing is not None})
 
 def expected_notebook(request,directory):
     directory=Path(directory);bundle=directory/'native-input.zip'
@@ -147,12 +212,18 @@ def export_outputs(request,store,target):
         if sha(path)!=ref['sha256']:raise RemoteError('REMOTE_ARTIFACT_INTEGRITY')
         paths.extend([meta.relative_to(store.root).as_posix(),path.relative_to(store.root).as_posix()])
     if not paths:raise RemoteError('REMOTE_OUTPUTS')
-    pack(store.root,paths,target)
+    if 'limits' in request:streaming.pack_archive(store.root,paths,target,request['limits'])
+    else:pack(store.root,paths,target)
 
 def import_outputs(request,store,bundle):
     from fsf.remote.v2 import validate_result
     with tempfile.TemporaryDirectory(prefix='.native-output-',dir=store.root) as temp:
-        names=unpack(bundle,temp);root=Path(temp)
+        root=Path(temp)
+        if 'limits' in request:
+            root=root/'unpacked'
+            streaming.extract_archive(bundle,root,request['limits'],None)
+            names={p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()}
+        else:names=unpack(bundle,temp)
         staged=NativeStore({**store.profile,'root':str(root)})
         prefix=request['store_binding']['output_prefix']+request['request_digest']+'/'
         refs=[];expected=set()
@@ -179,6 +250,10 @@ def call(value):
     if value.get("operation") == "submit":
         from fsf.remote.dispatch_hold import refuse_held_submit
         refuse_held_submit(value["directory"])
+    if value["request"].get("schema_version")=="fsf_remote_request_v5":
+        from fsf.remote.v2 import check_authorization
+        check_authorization(value["request"],value["profile"],NativeStore(read_json(value["store_config"])),
+                            new_submission=value["operation"]=="submit")
     from kaggle.api.kaggle_api_extended import KaggleApi
     from fsf.remote.kaggle_v2_api import _saved,_normalized_notebook,_version_status
     from fsf.remote.v2_transports import metadata
@@ -217,13 +292,18 @@ def call(value):
         store=NativeStore(read_json(value['store_config']));stage_notebook(request,store,directory)
         source=dataset_source(request,owner,directory)
         if source:
-            publish_private_dataset(api,source,directory/'native-input.zip',directory)
+            publish_private_dataset(api,source,directory/'native-input.zip',directory,limits=request.get('limits'))
             expected['dataset_sources']=[source]
         write_json(directory/'kernel-metadata.json',expected)
         return {'prepared':True,'gpu':request['policy']['gpu'],'verified_execution':False,'data_plane':'kaggle_native_v1'}
     if operation=='submit':
         source=dataset_source(request,owner,directory)
         if source:expected['dataset_sources']=[source]
+        if 'limits' in request:
+            proof=read_json(directory/'dataset-verification.json')
+            bundle=directory/'native-input.zip'
+            if proof.get('private') is not True or proof.get('identity')!={'size_bytes':bundle.stat().st_size,'sha256':sha(bundle)}:
+                raise RemoteError('REMOTE_KAGGLE_DATASET_VERIFY')
         if read_json(directory/'kernel-metadata.json')!=expected or read_json(directory/'worker.ipynb')!=expected_notebook(request,directory):
             raise RemoteError('REMOTE_KAGGLE_POLICY')
         if fixed and _saved(api,ref).metadata.current_version_number!=previous:
@@ -265,7 +345,9 @@ def call(value):
             token=reply.next_page_token
             if not token:break
         if token or len(matches)!=1:raise RemoteError('REMOTE_KAGGLE_OUTPUT_NOT_READY')
-        target=directory/'native-result.zip';target.unlink(missing_ok=True);_download(matches[0].url,target)
+        target=directory/'native-result.zip';target.unlink(missing_ok=True)
+        if 'limits' in request:_download(matches[0].url,target,limits=request['limits'])
+        else:_download(matches[0].url,target)
         # Bracket native latest-output endpoint with immutable version checks.
         if _saved(api,ref).metadata.current_version_number!=target_version:raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
         store=NativeStore(read_json(value['store_config']))

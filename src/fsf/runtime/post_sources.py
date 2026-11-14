@@ -10,7 +10,7 @@ from fsf.conformance.digest import canonical_contract_digest as digest
 from fsf.conformance.media import SafeFfprobeRunner, receipt_authorizes_production
 from fsf.core.asset_library import _path_parts, _no_links, _root, _open_reader
 from fsf.core.edit_store import read_json
-from fsf.core.editing import _shape
+from fsf.core.editing import _shape, used_video_sources
 from fsf.core.consistency import resolve_execution_context
 from fsf.runtime.handoff import build_consistency_requirements
 from fsf.runtime.consistency_review import is_review_valid, REVIEW_STORE_FILENAME
@@ -92,7 +92,7 @@ class SourceVerifier:
     def _verify(self):
         result = {}
         paths_seen = {}
-        used = {c["source_id"] for c in self.edit["clips"]}
+        used = used_video_sources(self.edit)
         for source in self.edit["sources"]:
             if source["source_id"] not in used:
                 continue

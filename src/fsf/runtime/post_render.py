@@ -69,6 +69,7 @@ def render(edit, settings, sources, folder, *, preview_range=None):
     has_audio = lambda source_id: any(s.get("codec_type") == "audio" for s in sources[source_id]["raw"].get("streams", []))
     audio = settings["audio"] != "strip" and (settings["audio"] == "require" or any(has_audio(c["source_id"]) for c in clips))
     segments, frame_counts = [], []
+    layers = sorted(edit.get("video_layers", []), key=lambda layer: (layer["z"], layer["layer_id"]))
     for index, clip in enumerate(clips):
         source = sources[clip["source_id"]]
         count = clip["out_frame"] - clip["in_frame"]
@@ -79,7 +80,38 @@ def render(edit, settings, sources, folder, *, preview_range=None):
         if audio and not present:
             args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
         vf = f"fps={rate},trim=start_frame={clip['in_frame']}:end_frame={clip['out_frame']},setpts=PTS-STARTPTS,scale={settings['width']}:{settings['height']}:force_original_aspect_ratio=decrease,pad={settings['width']}:{settings['height']}:(ow-iw)/2:(oh-ih)/2,setsar=1"
-        args += ["-map", "0:v:0", "-vf", vf, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", rate, "-t", f"{duration:.9f}"]
+        clip_offset = preview_range[1] if preview_range else 0
+        graphics = []
+        for layer in layers:
+            if layer["clip_id"] != clip["clip_id"]:
+                continue
+            left = max(layer["start_frame"], clip_offset)
+            right = min(layer["end_frame"], clip_offset + count)
+            if left < right:
+                graphics.append((layer, left, right))
+        if graphics:
+            chains = [f"[0:v:0]{vf}[base0]"]
+            first_input = 2 if audio and not present else 1
+            for number, (layer, left, right) in enumerate(graphics):
+                args += ["-i", sources[layer["source_id"]]["path"]]
+                first = layer["source_in"] + left - layer["start_frame"]
+                last = first + right - left
+                offset = left - clip_offset
+                chains.append(
+                    f"[{first_input + number}:v:0]fps={rate},trim=start_frame={first}:end_frame={last},"
+                    f"setpts=PTS-STARTPTS+{offset}*{clock['den']}/{clock['num']}/TB,"
+                    f"scale={layer['width']}:{layer['height']}[layer{number}]"
+                )
+                chains.append(
+                    f"[base{number}][layer{number}]overlay=x={layer['x']}:y={layer['y']}:"
+                    f"eof_action=pass:repeatlast=0:enable='gte(n,{offset})*lt(n,{right - clip_offset})'"
+                    f"[base{number + 1}]"
+                )
+            args += ["-filter_complex_threads", "1", "-filter_complex", ";".join(chains),
+                     "-map", f"[base{len(graphics)}]"]
+        else:
+            args += ["-map", "0:v:0", "-vf", vf]
+        args += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", rate, "-t", f"{duration:.9f}"]
         if audio:
             start_seconds = float(clip["in_frame"] / fps) if present else 0
             args += ["-map", "0:a:0" if present else "1:a:0", "-af", f"atrim=start={start_seconds:.9f}:end={start_seconds + duration:.9f},asetpts=PTS-STARTPTS,apad=whole_dur={duration:.9f}", "-ar", "48000", "-ac", "2", "-c:a", "aac"]

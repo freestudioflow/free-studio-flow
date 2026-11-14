@@ -1,9 +1,10 @@
 """Read-only patch impact hints; never confirm an anchor or publish a patch."""
-from fsf.core.editing import validate_edit,_shape,EditValidationError
+from fsf.core.editing import validate_edit, validate_patch_shape, EditValidationError
 
 
 def patch_impact(edit,patch):
-    validate_edit(edit);_shape(patch,'fsf_edit_patch_v1')
+    validate_edit(edit)
+    validate_patch_shape(patch)
     if (patch['edit_id'],patch['base_revision'],patch['base_digest'])!=(edit['edit_id'],edit['revision'],edit['edit_digest']):
         raise EditValidationError('Patch base revision/digest is outdated')
     timing=any(op['op'] in {'reorder','trim','split','duplicate','remove'} for op in patch['operations'])

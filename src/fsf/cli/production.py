@@ -107,6 +107,12 @@ def main(argv=None):
     indexed.add_argument('--driver', required=True, action=_Once)
     indexed.add_argument('--seconds', type=_integer, action=_Once)
     indexed.add_argument('--delivery', action='store_true')
+    indexed.add_argument('--resource-profile', action=_Once)
+    resources = commands.add_parser("resource-profile", help="Write an opt-in local resource policy")
+    resources.add_argument("--name", choices=("low-memory-v1", "roomy-memory-v1"), required=True, action=_Once)
+    resources.add_argument("--out", required=True, action=_Once)
+    observation = commands.add_parser("resource-inspect", help="Observe the current owned process tree")
+    observation.add_argument("--profile", required=True, action=_Once)
     store_create = commands.add_parser('store-create', help='Create an indexed production authority')
     store_create.add_argument('plan')
     store_create.add_argument('--authorization', required=True, action=_Once)
@@ -160,7 +166,18 @@ def main(argv=None):
     rollup.add_argument('--out',required=True,action=_Once)
     try:
         args = parser.parse_args(argv)
-        if args.operation.startswith('store-') or args.operation == 'run-batch-v2':
+        if args.operation == "resource-profile":
+            from fsf.production.resources import resource_profile
+            result = resource_profile(args.name)
+            with edit_lock(args.out) as path:
+                if path.exists():
+                    raise ProductionError("PRODUCTION_TARGET_EXISTS")
+                publish(path, result)
+        elif args.operation == "resource-inspect":
+            from fsf.production.resources import Governor
+            governor = Governor(read_json(args.profile))
+            result = governor.observe(force=True)
+        elif args.operation.startswith('store-') or args.operation == 'run-batch-v2':
             from pathlib import Path
             from fsf.production.store import ProductionStore
             if args.operation == 'store-create':
@@ -208,9 +225,15 @@ def main(argv=None):
                         root = store.root / 'drivers' / execution
                         root.mkdir(parents=True, exist_ok=True)
                         backend = CommandDriver(read_json(args.driver), plan=plan, state_root=root)
+                        governor = None
+                        if args.resource_profile is not None:
+                            from fsf.production.resources import Governor
+                            import uuid
+                            governor = Governor(read_json(args.resource_profile),
+                                report=store.root / "resource-reports" / (uuid.uuid4().hex+".jsonl"))
                         result = run_store_batch(plan, store=store, driver=backend,
                                                  seconds=300 if args.seconds is None else args.seconds,
-                                                 delivery=args.delivery)
+                                                 delivery=args.delivery, resource_governor=governor)
                 finally:store.close()
         elif args.operation=='quality-rollup':
             from fsf.production.quality_rollup import quality_rollup

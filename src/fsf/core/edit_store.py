@@ -324,10 +324,10 @@ def create_edit_file(path, edit: dict, *, timeout=MAX_LOCK_WAIT_SECONDS) -> dict
 
 def patch_edit_file(path, patch: dict, *, timeout=MAX_LOCK_WAIT_SECONDS) -> dict:
     """Re-read and compare the patch base while holding the destination lock."""
-    from fsf.core.editing import _shape
+    from fsf.core.editing import validate_patch_shape
     patch = copy.deepcopy(patch)
     try:
-        _shape(patch, "fsf_edit_patch_v1")
+        validate_patch_shape(patch)
     except (EditValidationError, TypeError, ValueError):
         _invalid()
     with edit_lock(path, timeout=timeout) as target:

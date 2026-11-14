@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rss_bytes": {
+      "type": "integer",
+      "minimum": 67108864,
+      "maximum": 9223372036854775807
+    },
+    "commit_bytes": {
+      "type": "integer",
+      "minimum": 67108864,
+      "maximum": 9223372036854775807
+    },
+    "max_parallel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "chunk_bytes": {
+      "type": "integer",
+      "minimum": 4096,
+      "maximum": 8388608
+    },
+    "admission_wait_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5400
+    },
+    "resume_watch_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5400
+    },
+    "hard_duration_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60
+    },
+    "cleanup_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "host_hard_bytes": {
+      "type": "integer",
+      "minimum": 67108864,
+      "maximum": 2147483648
+    },
+    "schema_version": {
+      "const": "fsf_local_resources_v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96
+    },
+    "task_commit_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    }
+  },
+  "required": [
+    "rss_bytes",
+    "commit_bytes",
+    "max_parallel",
+    "chunk_bytes",
+    "admission_wait_seconds",
+    "resume_watch_seconds",
+    "hard_duration_seconds",
+    "cleanup_seconds",
+    "host_hard_bytes",
+    "schema_version",
+    "name",
+    "task_commit_bytes"
+  ]
+}

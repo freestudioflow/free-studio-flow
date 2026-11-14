@@ -931,6 +931,9 @@ def handle_execute(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "reference":
+        from fsf.cli.reference import main as reference_main
+        return reference_main(arguments[1:])
     if arguments and arguments[0] == "production":
         from fsf.cli.production import main as production_main
         return production_main(arguments[1:])

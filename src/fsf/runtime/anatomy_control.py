@@ -108,8 +108,18 @@ def _run_docker(checkout, job_path, output_json):
         "-v", f"{work}:/work",
         "node:20-bookworm-slim",
         "node", "/sampler/anatomy_sample.mjs", "/anatomy", f"/work/{job_path.name}", f"/work/{output_json.name}"]
+    from fsf.remote.diagnostics import record, now
+    import time
+    started_at, started_clock = now(), time.monotonic()
     result = run_safe_subprocess(args, timeout_seconds=180, output_limit_bytes=65536)
     if result.returncode or result.timed_out:
+        # Preserve the existing error code; evidence never supplies an approval.
+        try:
+            record(work, request_id=ANATOMY_COMMIT, phase="anatomy_docker_sampler",
+                   started_at=started_at, started_clock=started_clock,
+                   operation_status="failed", code="ANATOMY_SAMPLER", result=result)
+        except (OSError, ValueError):
+            pass  # Diagnostic storage cannot replace the existing failure code.
         raise AnatomyError("ANATOMY_SAMPLER")
 
 

@@ -12,6 +12,25 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Candidate notes (0.1.0rc12)
+
+- Versioned resource and streaming contracts add process-tree monitoring,
+  adaptive backpressure and large-artifact paths. Existing profile limits
+  and sealed documents retain their versioned behavior.
+- Reference analysis provides time mapping, contact sheets and replaceable
+  analyzers. Operators can organize cross-shot entities, revise production
+  drafts and compare a reference with a verified delivery.
+- Versioned edit patches support picture-in-picture composition. A local
+  synthetic delivery exercise covered three rounds of subtitle, audio gain,
+  order and overlay changes with no additional generation dispatch or charge.
+- Private Kaggle CPU evidence covers the verified transfer exercised in
+  testing. Dataset uploads above 64 MiB, Gemma/SA-3 and automatic Secret
+  attachment remain pending.
+- REAL24, ENT12, QC240, neural model A/B, human quality review, long-take
+  runtime qualification and designated GPU hardware remain pending.
+  The legacy 256 KiB write bound and latency stability across runs remain
+  unqualified. The prior Docker sampler failure remains unresolved.
+
 ## Release notes (0.1.0rc11)
 
 Version `0.1.0rc11` is published from tag `v0.1.0rc11` at commit

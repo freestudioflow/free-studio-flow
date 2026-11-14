@@ -5,7 +5,7 @@ from fractions import Fraction
 from pdx_artifact_core import validate_execution_plan
 
 from fsf.conformance.media import build_expected_contract, validate_media_expected
-from fsf.core.editing import validate_edit
+from fsf.core.editing import used_video_sources, validate_edit
 
 
 def compile_post_plan(edit, *, width=1024, height=576, audio="keep", subtitles="none", subtitle_track=None):
@@ -35,7 +35,10 @@ def compile_post_plan(edit, *, width=1024, height=576, audio="keep", subtitles="
     validate_media_expected(expected)
     context = {"edit": copy.deepcopy(edit), "width": width, "height": height, "audio": audio,
                "subtitles": subtitles, "subtitle_track": subtitle_track}
-    selected = {c["source_id"] for c in edit["clips"]}
+    selected = used_video_sources(edit)
+    if any(layer["x"] + layer["width"] > width or layer["y"] + layer["height"] > height
+           for layer in edit.get("video_layers", [])):
+        raise ValueError("POST_LAYER_BOUNDS")
     # Unused sources remain declarations but are not imported or approved by inference.
     outputs = [f"artifact:sources/{s['source_id']}.mp4" for s in edit["sources"] if s["source_id"] in selected]
     if has_mix:

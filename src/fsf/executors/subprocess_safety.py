@@ -432,7 +432,7 @@ def _reclaim_windows_job(job_handle: int, timeout: float = 1.0) -> None:
         time.sleep(0.01)
 
 
-def _create_windows_job_object() -> int | None:
+def _create_windows_job_object(memory_bytes=None) -> int | None:
     """Create a Job Object with KILL_ON_JOB_CLOSE so descendants die with the job."""
     try:
         import ctypes
@@ -480,6 +480,9 @@ def _create_windows_job_object() -> int | None:
         JobObjectExtendedLimitInformation = 9
         info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if memory_bytes is not None:
+            info.BasicLimitInformation.LimitFlags |= 0x200
+            info.JobMemoryLimit = memory_bytes
         ok = kernel32.SetInformationJobObject(
             h_job,
             JobObjectExtendedLimitInformation,
@@ -679,6 +682,21 @@ def run_safe_subprocess(
     - High-resolution timing records precise elapsed milliseconds.
     - stdout and stderr are sanitized against secrets before return.
     """
+    if __name__ in {"native_safety", "fsf_bootstrap_safety", "fsf_v2_safety"}:
+        # The standalone bootstrap loads this file before installing FSF.
+        governor = None
+    else:
+        from fsf.production.resources import current_governor
+        governor = current_governor()
+    if governor is not None:
+        governor.check_running()
+        original_cancel = cancel_check
+        def resource_cancel():
+            if original_cancel is not None and original_cancel():
+                return True
+            return governor.check_running()
+        cancel_check = resource_cancel
+        grace_period_sec = min(10, governor.profile["cleanup_seconds"])
     cmd_args = [str(a) for a in args]
     cwd_str = str(cwd) if cwd is not None else None
 
@@ -745,7 +763,12 @@ def run_safe_subprocess(
 
     job_handle: int | None = None
     if sys.platform == "win32":
-        job_handle = _create_windows_job_object()
+        job_handle = (_create_windows_job_object(governor.profile["commit_bytes"])
+                      if governor is not None else _create_windows_job_object())
+        if governor is not None and job_handle is None:
+            governor.reason = "job_enforcement_unavailable"
+            from fsf.production.resources import ResourcePause
+            raise ResourcePause()
 
     t0 = time.perf_counter()
     try:

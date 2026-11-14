@@ -58,7 +58,8 @@ def timing_anchor_digest(edit: dict) -> str:
 
 
 def validate_edit(edit: dict) -> None:
-    _shape(edit, "fsf_edit_spec_v1")
+    _shape(edit, "fsf_edit_spec_v2" if isinstance(edit, dict)
+           and edit.get("schema_version") == "fsf_edit_spec_v2" else "fsf_edit_spec_v1")
     if edit["edit_digest"] != _digest(edit):
         raise EditValidationError("Edit digest mismatch")
     if (edit["revision"] == 1) != (edit["parent_digest"] is None):
@@ -94,6 +95,15 @@ def validate_edit(edit: dict) -> None:
         visit(identifier)
     _unique(edit["audio_tracks"] + edit["subtitle_tracks"], "track_id", "track")
     total = sum(c["out_frame"] - c["in_frame"] for c in clips.values())
+    layers = _unique(edit.get("video_layers", []), "layer_id", "layer")
+    for layer in layers.values():
+        clip = clips.get(layer["clip_id"])
+        source = sources.get(layer["source_id"])
+        length = layer["end_frame"] - layer["start_frame"]
+        if (clip is None or source is None or length <= 0
+                or layer["end_frame"] > clip["out_frame"] - clip["in_frame"]
+                or layer["source_in"] + length > source["duration_frames"]):
+            raise EditValidationError("Invalid video layer interval")
     anchor = timing_anchor_digest(edit)
     cues = []
     for track in edit["subtitle_tracks"]:
@@ -138,12 +148,16 @@ def create_edit(*, edit_id: str, clock_rate: dict, sources: list[dict], clips: l
 def apply_edit_patch(edit: dict, patch: dict) -> dict:
     """Apply an atomic in-memory metadata revision; never execute media tools."""
     validate_edit(edit)
-    _shape(patch, "fsf_edit_patch_v1")
+    validate_patch_shape(patch)
     if (patch["edit_id"], patch["base_revision"], patch["base_digest"]) != (edit["edit_id"], edit["revision"], edit["edit_digest"]):
         raise EditValidationError("Patch base revision/digest is outdated or belongs to another edit")
     result = copy.deepcopy(edit)
     used = {c["clip_id"] for c in result["clips"]} | set(result["retired_clip_ids"])
     for op in patch["operations"]:
+        if op["op"] == "set_video_layers":
+            result["schema_version"] = "fsf_edit_spec_v2"
+            result["video_layers"] = copy.deepcopy(op["layers"])
+            continue
         if "audio" in op["op"]:
             from fsf.core.audio_edit import apply_audio_operation
             apply_audio_operation(result, op)
@@ -224,6 +238,15 @@ def apply_edit_patch(edit: dict, patch: dict) -> dict:
     result["edit_digest"] = _digest(result)
     validate_edit(result)
     return result
+
+
+def validate_patch_shape(patch):
+    _shape(patch, "fsf_edit_patch_v2" if isinstance(patch, dict)
+           and patch.get("schema_version") == "fsf_edit_patch_v2" else "fsf_edit_patch_v1")
+
+
+def used_video_sources(edit):
+    return {row["source_id"] for row in edit["clips"] + edit.get("video_layers", [])}
 
 
 def _timecode(frame: int, clock: dict) -> str:

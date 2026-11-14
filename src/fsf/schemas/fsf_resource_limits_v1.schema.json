@@ -1,0 +1,114 @@
+{
+  "type": "object",
+  "properties": {
+    "archive_compressed_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "archive_members": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "archive_unpacked_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "control_response_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 67108864
+    },
+    "disk_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "disk_reserve_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "http_request_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "input_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "manifest_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "manifest_line_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1048576
+    },
+    "member_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "output_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "pending_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "process_tree_commit_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "process_tree_rss_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "worker_package_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "schema_version": {
+      "const": "fsf_resource_limits_v1"
+    }
+  },
+  "required": [
+    "archive_compressed_bytes",
+    "archive_members",
+    "archive_unpacked_bytes",
+    "control_response_bytes",
+    "disk_bytes",
+    "disk_reserve_bytes",
+    "http_request_bytes",
+    "input_bytes",
+    "manifest_bytes",
+    "manifest_line_bytes",
+    "member_bytes",
+    "output_bytes",
+    "pending_bytes",
+    "process_tree_commit_bytes",
+    "process_tree_rss_bytes",
+    "schema_version",
+    "seconds",
+    "worker_package_bytes"
+  ],
+  "additionalProperties": false
+}

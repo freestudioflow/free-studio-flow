@@ -93,12 +93,18 @@ def child_plan(recipe):
 
 
 def validate_profile(value,store=None):
-    schema=value.get('schema_version') if value.get('schema_version') in {'fsf_remote_profile_v3','fsf_remote_profile_v4'} else 'fsf_remote_profile_v2'
+    schema=value.get('schema_version') if value.get('schema_version') in {'fsf_remote_profile_v3','fsf_remote_profile_v4','fsf_remote_profile_v5'} else 'fsf_remote_profile_v2'
     shape(value,schema);reject_inline_credentials(value)
+    if schema=='fsf_remote_profile_v5':
+        from fsf.remote.streaming import validate_limits
+        validate_limits(value['limits'])
+        if (value['policy']['gpu'] or value['settings'].get('activation_mode','api_push')!='api_push'
+                or store is not None and store.profile['schema_version']!='fsf_kaggle_native_store_v2'):
+            raise RemoteError('REMOTE_LIMITS_ROUTE')
     if schema=='fsf_remote_profile_v4':
         from fsf.remote.destination import resolve
         resolve(value)
-    base={k:v for k,v in value.items() if k not in {'gpu_limits','store_binding','group_limits','allocation','allow_recipe_experiments','destination'}}
+    base={k:v for k,v in value.items() if k not in {'gpu_limits','store_binding','group_limits','allocation','allow_recipe_experiments','destination','limits'}}
     base=copy.deepcopy(base)
     if value['transport']=='command':
         from fsf.remote.command_adapter import validate_settings
@@ -141,9 +147,21 @@ def validate_profile(value,store=None):
 
 
 def validate_request(request,store=None):
-    schema=request.get('schema_version') if request.get('schema_version') in {'fsf_remote_request_v3','fsf_remote_request_v4'} else 'fsf_remote_request_v2'
+    schema=request.get('schema_version') if request.get('schema_version') in {'fsf_remote_request_v3','fsf_remote_request_v4','fsf_remote_request_v5'} else 'fsf_remote_request_v2'
     shape(request,schema);reject_inline_credentials(request)
     if seal(request,'request_digest')['request_digest']!=request['request_digest']:raise RemoteError('REMOTE_INTEGRITY')
+    if schema=='fsf_remote_request_v5':
+        from fsf.remote.streaming import validate_limits
+        limits=validate_limits(request['limits'])
+        if digest(limits)!=request['limits_digest']:
+            raise RemoteError('REMOTE_LIMITS_MISMATCH')
+        if request['policy']['gpu'] or store is not None and store.profile['schema_version']!='fsf_kaggle_native_store_v2':
+            raise RemoteError('REMOTE_LIMITS_ROUTE')
+        if (sum(item['reference']['size_bytes'] for item in request['inputs'])>limits['input_bytes']
+                or request['worker_wheel']['size_bytes']>limits['worker_package_bytes']):
+            raise RemoteError('REMOTE_SIZE_LIMIT')
+        if request['policy']['deadline_seconds']>limits['seconds']:
+            raise RemoteError('REMOTE_LIMITS_MISMATCH')
     recipe=validate_recipe(request['recipe'])
     if request['fsf_version']!=__version__ or request['worker_core_sha256']!=worker_identity() or request['child']['plan']!=child_plan(recipe):
         raise RemoteError('REMOTE_WORKER_VERSION')
@@ -203,6 +221,10 @@ def check_authorization(request,profile,store,*,new_submission=True):
     if not profile['authorized'] or request['profile_id']!=profile['profile_id'] or request['adapter_digest']!=digest(profile) or not _recipe_allowed(request['recipe'],profile):
         raise RemoteError('REMOTE_NOT_AUTHORIZED')
     if request['store_binding']!=profile['store_binding']:raise RemoteError('REMOTE_STORE_FORBIDDEN')
+    if request.get('limits') != profile.get('limits'):
+        raise RemoteError('REMOTE_LIMITS_MISMATCH')
+    if 'limits' in request and request['segment']['end_frame']-request['segment']['start_frame']>profile['group_limits']['max_frames']:
+        raise RemoteError('REMOTE_SEGMENT_MAPPING')
     if request['schema_version'] in {'fsf_remote_request_v3','fsf_remote_request_v4'}:
         mode='experimental' if profile.get('allow_recipe_experiments') is True else None
         if request.get('execution_mode')!=mode:raise RemoteError('REMOTE_NOT_AUTHORIZED')
@@ -241,6 +263,10 @@ def prepare_request(definition,recipe,*,profile,store,inputs,wheel,segment,outpu
     binding=digest({'parent':definition['parent'],'recipe':recipe['recipe_digest'],'inputs':references,'segment':segment})
     policy=copy.deepcopy(profile['policy']);policy['gpu']=recipe['execution_requirements']['render']['device']=='gpu'
     version='4' if is_v4(recipe) else ('3' if recipe['schema_version']=='fsf_remote_recipe_v3' or profile.get('allow_recipe_experiments') is True else '2')
+    if 'limits' in profile:
+        if version!='2':raise RemoteError('REMOTE_LIMITS_ROUTE')
+        version='5'
+        policy['deadline_seconds']=min(policy['deadline_seconds'],profile['limits']['seconds'])
     request={'schema_version':'fsf_remote_request_v'+version,'protocol_version':version,'fsf_version':__version__,
              'parent':definition['parent'],'profile_id':profile['profile_id'],'adapter_digest':digest(profile),
              'child':{'job_id':'child_'+binding[:24],'run_id':'run_'+binding[24:48],'attempt_id':definition['parent']['attempt_id'],'plan':child_plan(recipe)},
@@ -248,6 +274,8 @@ def prepare_request(definition,recipe,*,profile,store,inputs,wheel,segment,outpu
              'worker_core_sha256':worker_identity(),'worker_wheel':wheel,'video_condition':definition['video_condition'],
              'consistency_requirements':definition['consistency_requirements'],'expected_media_contract':definition['expected_media_contract'],
              'store_binding':profile['store_binding'],'segment':segment}
+    if version=='5':
+        request.update(limits=profile['limits'],limits_digest=digest(profile['limits']))
     if version in {'3','4'} and profile.get('allow_recipe_experiments') is True:
         request['execution_mode']='experimental'
     request=seal(request,'request_digest');check_authorization(request,profile,store)
@@ -269,8 +297,11 @@ def run_worker(request,*,store,output_root,approved_recipe):
     old_cancel=store.cancelled
     cancel_path=_root(output_root)/request['request_digest']/'cancel'
     store.cancelled=lambda:cancel_path.exists() or bool(old_cancel and old_cancel())
+    from contextlib import nullcontext
+    from fsf.remote.streaming import resource_scope
+    scope=resource_scope(request['limits']) if 'limits' in request else nullcontext()
     try:
-        with store.budget(time.monotonic()+request['policy']['deadline_seconds']):
+        with store.budget(time.monotonic()+request['policy']['deadline_seconds']), scope:
             try:
                 return _run_worker(request,store=store,output_root=output_root,approved_recipe=approved_recipe)
             except BaseException as exc:
@@ -312,6 +343,7 @@ def _run_worker(request,*,store,output_root,approved_recipe):
         recipe=request['recipe'];environment={'schema_version':'fsf_remote_environment_v2','python':__import__('platform').python_version(),
             'gpu_available':None,'gpu_render_verified':False,'probes':[]}
         if request.get('execution_mode')=='experimental':environment['experimental_execution']=True
+        if 'limits' in request:environment['limits_digest']=request['limits_digest']
         journal_path=directory/'child-journal.json'
         journal=read_json(journal_path) if journal_path.exists() else seal({'schema_version':'fsf_remote_child_journal_v2','request_digest':key,'recipe_digest':recipe['recipe_digest'],'steps':{}},'journal_digest')
         if journal['request_digest']!=key or seal(journal,'journal_digest')['journal_digest']!=journal.get('journal_digest'):raise RemoteError('REMOTE_CHILD_JOURNAL')
@@ -433,6 +465,8 @@ def _run_worker(request,*,store,output_root,approved_recipe):
             for step in recipe['steps']:
                 for spec in step['outputs']:
                     path=safe_path(outputs,spec['path'])
+                    if 'limits' in request and path.stat().st_size>request['limits']['output_bytes']:
+                        raise RemoteError('REMOTE_SIZE_LIMIT')
                     ref=store.put(path,artifact_id=spec['artifact_id'],key=request['store_binding']['output_prefix']+key+'/outputs/'+spec['path'],
                         role=spec['role'],media_type=spec['media_type'],state_root=transfer)
                     artifacts.append({'artifact_id':spec['artifact_id'],'reference':ref})
@@ -519,6 +553,9 @@ def validate_result(result,request,store):
             raise RemoteError('REMOTE_OUTPUTS')
     if result['status']=='completed' and (identifiers!=set(expected) or result['error_code'] is not None):raise RemoteError('REMOTE_OUTPUTS')
     if total>store.profile['max_total_bytes']:raise RemoteError('REMOTE_SIZE_LIMIT')
+    if 'limits' in request and sum(item['reference']['size_bytes'] for item in result['artifacts']
+            if item['artifact_id'] in {spec['artifact_id'] for step in request['recipe']['steps'] for spec in step['outputs']})>request['limits']['output_bytes']:
+        raise RemoteError('REMOTE_SIZE_LIMIT')
     return result
 
 
@@ -568,6 +605,7 @@ def collect_diagnostics(request, *, store, directory):
 
 
 def collect_result(request,*,store,directory,recovery=False):
+    if 'limits' in request:validate_request(request,store)
     directory=_root(directory);state=directory/'transfer';state.mkdir(exist_ok=True)
     scratch=Path(tempfile.mkdtemp(prefix='.v2-collect-',dir=directory))
     try:
@@ -587,6 +625,8 @@ def collect_result(request,*,store,directory,recovery=False):
                 report,_=evaluate_media_file(target,expected_contract=request['expected_media_contract'])
                 if report.get('evaluation_status')!='conforms':raise RemoteError('REMOTE_QC_FAILED')
         environment=read_json(scratch/'environment.json');journal=read_json(scratch/'child-journal.json')
+        if 'limits' in request and environment.get('limits_digest')!=request['limits_digest']:
+            raise RemoteError('REMOTE_LIMITS_MISMATCH')
         if request.get('execution_mode')=='experimental' and environment.get('experimental_execution') is not True:
             raise RemoteError('REMOTE_ENVIRONMENT_INTEGRITY')
         if digest(environment)!=result['environment_digest'] or sha(scratch/'child-journal.json')!=result['child_journal_sha256']:

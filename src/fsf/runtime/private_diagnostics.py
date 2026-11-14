@@ -17,6 +17,7 @@ def source_changed(phase,path=None,before=None,after=None):
         def snapshot(value):
             return {name:getattr(value,name) for name in ('st_size','st_mtime_ns','st_ctime_ns','st_ino','st_dev')} if value else None
         value={'event':'POST_SOURCE_CHANGED','phase':phase,'observed_at_ns':time.time_ns(),
+               'observed_monotonic_ns':time.monotonic_ns(),'process_id':os.getpid(),
                'source_token':hashlib.sha256(str(path).encode()).hexdigest() if path is not None else None,
                'before':snapshot(before),'after':snapshot(after)}
         fd,name=tempfile.mkstemp(prefix='post-source-',suffix='.json',dir=root)

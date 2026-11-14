@@ -46,6 +46,10 @@ class Budget:
 
     def check(self):
         if time.monotonic() >= self.deadline:fail('DEADLINE')
+        from fsf.production.resources import current_governor
+        governor = current_governor()
+        if governor is not None:
+            governor.check_running()
 
 
 def path_at(root, name):
@@ -75,7 +79,8 @@ def identity(root, ref, budget, copy_to=None):
             if not stat.S_ISREG(before.st_mode):fail('SOURCE_INVALID')
             if target is not None:out = target.open('xb')
             try:
-                while block := source.read(1024*1024):
+                from fsf.production.resources import read_chunk_bytes
+                while block := source.read(read_chunk_bytes()):
                     budget.check();count += len(block)
                     if count > ref['size_bytes']:fail('SIZE')
                     h.update(block)
