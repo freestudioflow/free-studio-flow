@@ -5,14 +5,23 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc11`**, available on PyPI.
+The current published pre-release is **`0.1.0rc12`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
-## Candidate notes (0.1.0rc12)
+## Release notes (0.1.0rc12)
+
+Version `0.1.0rc12` is published from tag `v0.1.0rc12` at commit
+`32517bd28237f23d4cbac9682e375ff52bfaa675`. GitHub and PyPI serve the same
+verified files. Use matching parent and worker builds.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| free_studio_flow-0.1.0rc12-py3-none-any.whl | 638221 | `8d04da6e4982816bef195d979517a43ae32d64bb8141277e4c3a3773a22a0636` |
+| free_studio_flow-0.1.0rc12.tar.gz | 849704 | `32173d60d2803958aae7d05f560f9392948e04aafad72be5d940611977e84179` |
 
 - Versioned resource and streaming contracts add process-tree monitoring,
   adaptive backpressure and large-artifact paths. Existing profile limits

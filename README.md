@@ -11,20 +11,20 @@ License: Apache-2.0. See [LICENSE](LICENSE).
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc12`**.
 
-Latest verified PyPI release: **[`0.1.0rc11`](https://pypi.org/project/free-studio-flow/0.1.0rc11/)**,
-published from tag **[`v0.1.0rc11`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc11)**
-at commit `e49d48d34992ceac4ab7c85ea48a4c7b48ca6e21`.
+Latest verified PyPI release: **[`0.1.0rc12`](https://pypi.org/project/free-studio-flow/0.1.0rc12/)**,
+published from tag **[`v0.1.0rc12`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc12)**
+at commit `32517bd28237f23d4cbac9682e375ff52bfaa675`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc11"
+python -m pip install "free-studio-flow==0.1.0rc12"
 ```
 <!-- pypi-release-status:end -->
 
-### RC12 candidate
+### Additions and accepted limits in rc12
 
-The source tree is an unpublished RC12 candidate. See the [RC12 candidate
-notes](docs/RELEASE.md#candidate-notes-010rc12) for the verified scope and
-pending qualification.
+Version 0.1.0rc12 is published on PyPI and GitHub Releases. See the
+[RC12 release notes](docs/RELEASE.md#release-notes-010rc12) for the verified
+scope and pending qualification.
 
 ### Additions and accepted limits in rc11
 
