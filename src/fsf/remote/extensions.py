@@ -24,6 +24,9 @@ def project_recipe(recipe, present=None):
 
 def validate_extensions(recipe):
     validate_limits(recipe)
+    from fsf.remote.setup_paths import setup_argv
+    for setup in recipe['environment']['setup']:
+        setup_argv(setup['args'], None, {'python': ''})
     model = recipe['execution_requirements']['model']
     if digest(model['lock']) != model['lock_digest']:
         raise RemoteError('REMOTE_MODEL_INTEGRITY')

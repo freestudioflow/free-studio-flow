@@ -12,6 +12,13 @@ from fsf.executors.subprocess_safety import run_safe_subprocess
 from fsf.remote.contracts import RemoteError, reject_inline_credentials, reject_credential_bytes, sha, write_json
 
 
+_FILM_PROVIDER_ERRORS = {
+    'KAGGLE_API_FAILED', 'KAGGLE_DATASET_CREATE', 'KAGGLE_DATASET_READY', 'KAGGLE_DATASET_VERIFY',
+    'KAGGLE_OUTPUT_NOT_READY', 'KAGGLE_SLOT_BUSY', 'KAGGLE_VERSION_AMBIGUOUS',
+    'REMOTE_INTENT_CONFLICT',
+}
+
+
 def validate_settings(settings):
     if set(settings) != {'command', 'files', 'cwd', 'timeout_seconds', 'credential_env_names'}:
         raise RemoteError('REMOTE_ADAPTER_CONFIG')
@@ -118,7 +125,8 @@ class CommandAdapter:
                 'operation':operation,'returncode':result.returncode,'timed_out':result.timed_out,
                 'stdout':safe_text(result.stdout,env=env),'stderr':safe_text(result.stderr,env=env)})
         if result.timed_out:raise RemoteError('REMOTE_ADAPTER_TIMEOUT')
-        if result.returncode or not target.is_file() or target.is_symlink():raise RemoteError('REMOTE_ADAPTER_FAILED')
+        if not target.is_file() or target.is_symlink() or (result.returncode and 'submission_digest' not in request):
+            raise RemoteError('REMOTE_ADAPTER_FAILED')
         secrets=[env[n] for n in self.settings['credential_env_names']]
         try:
             reject_credential_bytes(target,secrets)
@@ -132,6 +140,13 @@ class CommandAdapter:
                 target.unlink(missing_ok=True)
                 raise RemoteError('REMOTE_SECRET_OUTPUT')
             reject_inline_credentials(value)
+            if result.returncode:
+                if (isinstance(value, dict) and set(value)=={'schema_version','request_digest','operation','code'}
+                        and value['schema_version']=='fsf_command_adapter_error_v1'
+                        and value['request_digest']==request['request_digest'] and value['operation']==operation
+                        and isinstance(value['code'],str) and value['code'] in _FILM_PROVIDER_ERRORS):
+                    raise RemoteError(value['code'])
+                raise RemoteError('REMOTE_ADAPTER_FAILED')
             if set(value)!={'schema_version','request_digest','operation','result'} or value['schema_version']!='fsf_command_adapter_reply_v1' or value['request_digest']!=request['request_digest'] or value['operation']!=operation:
                 raise ValueError()
             output = value['result']

@@ -306,8 +306,10 @@ def call(value):
                 raise RemoteError('REMOTE_KAGGLE_DATASET_VERIFY')
         if read_json(directory/'kernel-metadata.json')!=expected or read_json(directory/'worker.ipynb')!=expected_notebook(request,directory):
             raise RemoteError('REMOTE_KAGGLE_POLICY')
-        if fixed and _saved(api,ref).metadata.current_version_number!=previous:
-            raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
+        if fixed:
+            observed=_saved(api,ref).metadata
+            if observed.current_version_number!=previous or observed.id!=activation['kernel_id']:
+                raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
         # GPU provider timeout overrides can leave an otherwise runnable saved
         # notebook queued. The embedded worker retains its shared hard budget;
         # do not confuse that execution budget with provider session admission.
@@ -323,6 +325,7 @@ def call(value):
     target_version=previous+1
     if operation=='reconcile' and fixed and saved.metadata.current_version_number==previous:return None
     if (saved.metadata.current_version_number!=target_version or not saved.metadata.is_private
+            or (fixed and saved.metadata.id!=activation['kernel_id'])
             or _normalized_notebook(saved.blob.source)!=_normalized_notebook(expected_notebook(request,directory))):
         raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
     if operation=='reconcile':return {'kernel':ref,'version':target_version,'request_digest':request['request_digest'],'data_plane':'kaggle_native_v1'}

@@ -11,11 +11,20 @@ from fsf.production.contracts import ProductionError, digest, integer, seal
 from fsf.production.control import file_identity
 from fsf.production.runner import validate_plan
 from fsf.production.store import _load, _dump
+from fsf.remote.contracts import RemoteError
+
+
+def _require_film_driver(store, driver):
+    if store._film:
+        from fsf.production.film import FilmDriver
+        if not isinstance(driver, FilmDriver) or driver.store is not store:
+            raise ProductionError('EXECUTION_BINDING_CONFLICT')
 
 
 def cancel_store_request(plan, *, store, driver, request_id, epoch, seconds=30):
     """Persist intent before provider contact; stopping never releases unknown fees."""
     validate_plan(plan)
+    _require_film_driver(store, driver)
     integer(seconds, 1, 5400)
     integer(epoch, 1)
     execution = store.execution(plan)
@@ -45,6 +54,8 @@ def cancel_store_request(plan, *, store, driver, request_id, epoch, seconds=30):
 
 
 def _verify(task, row, driver, *, store=None, deadline=None):
+    if row['status'] == 'verified_reuse' and store is not None and store._film:
+        return driver.verify_reuse(task)
     accepted = _load(row['accepted'])
     if isinstance(accepted, dict) and 'publication_request' in accepted:
         from fsf.production.publication import verify_publication
@@ -115,6 +126,7 @@ def run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality
 
 def _run_store_batch(plan, *, store, driver, seconds=300, delivery=False, quality_gate=None):
     validate_plan(plan)
+    _require_film_driver(store, driver)
     integer(seconds, 1, 5400)
     if type(delivery) is not bool:
         raise ProductionError('PRODUCTION_INVALID')
@@ -214,9 +226,14 @@ def _run_store_batch(plan, *, store, driver, seconds=300, delivery=False, qualit
                     store.mark_sending(request, epoch)
                     try:
                         driver.submit(task, request)
-                    except Exception:
+                    except Exception as exc:
                         store.observe(request, epoch, 'unknown')
                         store.settle(request)
+                        if store._film and isinstance(exc, RemoteError):
+                            with store.transaction():
+                                store._event('provider_submit_error', execution, row['id'], request,
+                                             payload={'code': exc.code})
+                            raise
                         raise ProductionError('PRODUCTION_RECONCILE_REQUIRED') from None
             if time.monotonic() >= deadline:
                 break
@@ -266,7 +283,9 @@ def _run_store_batch(plan, *, store, driver, seconds=300, delivery=False, qualit
                             raise
                         break
 
-        if db.execute("SELECT 1 FROM tasks WHERE execution=? AND status<>'machine_accepted' LIMIT 1", (execution,)).fetchone():
+        if db.execute("""SELECT 1 FROM tasks WHERE execution=? AND status<>'machine_accepted'
+                         AND (NOT ? OR status NOT IN ('excluded_optional','verified_reuse')) LIMIT 1""",
+                      (execution, store._film)).fetchone():
             return {'status': 'paused_batch' if time.monotonic() >= deadline else 'waiting', 'plan_digest': plan['plan_digest']}
         current = db.execute('SELECT revision FROM executions WHERE id=?', (execution,)).fetchone()[0]
         sweep = db.execute("SELECT * FROM verification_runs WHERE execution=? AND phase='verify' ORDER BY rowid DESC LIMIT 1", (execution,)).fetchone()
@@ -284,7 +303,8 @@ def _run_store_batch(plan, *, store, driver, seconds=300, delivery=False, qualit
         while time.monotonic() < deadline:
             rows = db.execute('''SELECT t.*,d.value FROM tasks t JOIN task_documents d
                 ON d.execution=t.execution AND d.id=t.id WHERE t.execution=? AND t.ordinal>=?
-                ORDER BY t.ordinal LIMIT 32''', (execution, position)).fetchall()
+                AND (NOT ? OR t.status NOT IN ('excluded_optional','verified_reuse'))
+                ORDER BY t.ordinal LIMIT 32''', (execution, position, store._film)).fetchall()
             if not rows:
                 with store.transaction():
                     if db.execute('SELECT revision FROM executions WHERE id=?', (execution,)).fetchone()[0] != current:

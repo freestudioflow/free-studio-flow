@@ -348,12 +348,9 @@ def _run_worker(request,*,store,output_root,approved_recipe):
         journal=read_json(journal_path) if journal_path.exists() else seal({'schema_version':'fsf_remote_child_journal_v2','request_digest':key,'recipe_digest':recipe['recipe_digest'],'steps':{}},'journal_digest')
         if journal['request_digest']!=key or seal(journal,'journal_digest')['journal_digest']!=journal.get('journal_digest'):raise RemoteError('REMOTE_CHILD_JOURNAL')
         env={k:os.environ[k] for k in ('PATH','SystemRoot','WINDIR','TEMP','TMP') if k in os.environ}
-        from fsf.remote.environment import INSTALL_NETWORK,install_environment
-        for name in recipe['environment']['credential_env_names']:
-            if name in {'AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN'}:raise RemoteError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
-            if name not in request['policy']['credential_env_names']:raise RemoteError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
-            if not os.environ.get(name):raise RemoteError('REMOTE_CREDENTIAL_MISSING')
-            if name not in INSTALL_NETWORK:env[name]=os.environ[name]
+        from fsf.remote.environment import install_environment,worker_credentials
+        env.update(worker_credentials(recipe['environment']['credential_env_names'],
+                                      request['policy']['credential_env_names'], source=os.environ))
         env['FSF_REMOTE_DEPTH']='1'
         from fsf.remote.gpu import gpu_runtime_environment
         env.update(gpu_runtime_environment())
@@ -379,8 +376,12 @@ def _run_worker(request,*,store,output_root,approved_recipe):
             started=now();clock=time.monotonic()
             from contextlib import nullcontext
             try:
+                argv = None
+                if installation and is_v4(recipe):
+                    from fsf.remote.setup_paths import setup_argv
+                    argv = setup_argv(args, directory, replacements)
                 with ((directory/'input-bindings.json').open('rb') if stdin_manifest else nullcontext(None)) as stream:
-                    result=run_safe_subprocess([resolve(a) for a in args],cwd=directory,env=install_environment(env,request['policy']['credential_env_names']) if installation else env,
+                    result=run_safe_subprocess(argv if argv is not None else [resolve(a) for a in args],cwd=directory,env=install_environment(env,request['policy']['credential_env_names']) if installation else env,
                         stdin=stream,inherit_env=False,timeout_seconds=left,cancel_check=lambda:(directory/'cancel').exists(),output_limit_bytes=16*1024*1024)
             except BaseException as exc:
                 from fsf.remote.diagnostics import safe_code

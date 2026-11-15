@@ -222,6 +222,37 @@ def test_browser_activation_never_calls_push_and_requires_new_exact_version(case
     with pytest.raises(RemoteError,match='REMOTE_KAGGLE_POLICY'):gateway.call(value)
 
 
+def test_explicit_fixed_slot_rejects_drift_and_unproved_create(case, monkeypatch, gateway_sdk):
+    from fsf.remote import kaggle_v2_api as gateway
+    root, *_ = case
+    profile, request = kaggle_request(case, monkeypatch, False)
+    profile['settings']['worker_notebook'] = 'fsf-worker-synthetic'
+    profile['destination'] = {'intent': 'existing', 'secret_aliases': [], 'model_sources': []}
+    class API:
+        config_values = {'username': 'synthetic_owner'}
+        def authenticate(self):
+            pass
+        def kernels_push(self, *args, **kwargs):
+            pytest.fail('unverified destination must never push')
+    monkeypatch.setitem(sys.modules, 'kaggle.api.kaggle_api_extended', SimpleNamespace(KaggleApi=API))
+    observed = SimpleNamespace(ref='synthetic_owner/fsf-worker-synthetic', is_private=True,
+                               id=123, current_version_number=4)
+    monkeypatch.setattr(gateway, '_saved', lambda *a: SimpleNamespace(metadata=observed))
+    monkeypatch.setattr(gateway, '_version_status', lambda *a: SimpleNamespace(status='COMPLETE'))
+    locator = {'artifact_id': 'request', 'store_id': 'store', 'object_key': 'jobs/request.json',
+               'version_id': 'fixed', 'sha256': 'a'*64, 'size_bytes': 500,
+               'role': 'data', 'media_type': 'application/json'}
+    value = dict(operation='prepare', request=request, profile=profile, locator=locator, directory=str(root/'prepared'))
+    assert gateway.call(value)['prepared']
+    value['operation'] = 'submit'
+    observed.current_version_number += 1
+    with pytest.raises(RemoteError, match='REMOTE_KAGGLE_VERSION_AMBIGUOUS'):
+        gateway.call(value)
+    profile['destination']['intent'] = 'create_private'
+    with pytest.raises(RemoteError, match='REMOTE_DESTINATION_UNVERIFIED'):
+        gateway.call(value)
+
+
 @pytest.mark.parametrize('settings',[
     {'accelerator':'CPU','activation_mode':'unknown'},
     {'accelerator':'CPU','activation_mode':'agent_browser'},

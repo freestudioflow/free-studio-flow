@@ -12,6 +12,39 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Candidate release notes (0.1.0rc13)
+
+Version `0.1.0rc13` is prepared for review. The verified release available
+on PyPI and GitHub Releases is `0.1.0rc12`.
+
+- A single approved feature submission checks chapter and shot coverage,
+  binds workorders to their inputs, and uses a durable attempt index to resume
+  and retrieve results. Unknown submissions retain their budget reservation
+  and require reconciliation. Returning a device lease leaves charge settlement
+  to the production ledger.
+- Local quality checks bind samples to the workorder reference and route.
+  Advisory assessments cannot authorize acceptance. A/V checks use a rational
+  frame-to-PCM mapping with an independent final sample bound. Voice receipts
+  cover CPU PCM WAV with an operator-approved verifier.
+- Windows and Linux completed a 172,800-frame, 24/1 synthetic feature with
+  recovery and reuse. The video-only output was 64×64. A separate Windows
+  run verified the same frame count at 24000/1001 for 7207.2 seconds.
+  Process-tree figures apply to those synthetic workloads. Windows Job
+  commit and Linux cgroup memory use different accounting, including cache
+  in the Linux figure.
+- The three-minute single-shot check covers analytic geometry and continuous
+  timing over 4320 frames, plus local rejection tests for missing or stale
+  evidence. Blender whitebox rendering, planning-model locks and held-out
+  subjects, neural A/B and final neural delivery remain pending.
+- Actual 120-minute audiovisual quality, cross-chapter playback review,
+  calibrated semantic QC and designated GPU hardware remain pending.
+  Official live evidence covers private Kaggle CPU and configured checks.
+  Automatic Secret attachment, positive proof for new private Kaggle slots,
+  dataset uploads above 64 MiB, and missing historical evidence remain pending.
+  Local model inference was skipped in the live check.
+- PDX pins and supported Blender versions carry forward. Earlier qualifications
+  and open limitations remain documented in the release notes below.
+
 ## Release notes (0.1.0rc12)
 
 Version `0.1.0rc12` is published from tag `v0.1.0rc12` at commit

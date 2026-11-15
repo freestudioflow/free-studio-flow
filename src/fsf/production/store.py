@@ -155,6 +155,15 @@ def _registry_value(root, auth, store_uuid):
                  'store_uuid': store_uuid, 'root_digest': digest(str(Path(root).resolve()))}, 'authority_digest')
 
 
+def _manifest_value(auth, store_uuid):
+    return seal({
+        'schema_version': 'fsf_production_store_manifest_v1', 'store_uuid': store_uuid,
+        'store_format': 'fsf_production_store_v1', 'database': 'state.sqlite3',
+        'sqlite_profile': 'delete_full_v1', 'authorization_digest': auth,
+        'activation_state': 'active', 'authority_epoch': 1, 'migration_receipt_digest': None,
+    }, 'manifest_digest')
+
+
 class ProductionStore:
     """Cooperating local writers; receipts are checksums, not rollback-proof signatures."""
 
@@ -191,6 +200,8 @@ class ProductionStore:
             if not registry_file.is_file() or read_json(registry_file) != _registry_value(self.root, auth['digest'], meta['uuid']):
                 raise ProductionError('PRODUCTION_AUTHORITY_CONFLICT')
             self.descriptor = descriptor
+            self._film = self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='film_submission'").fetchone() is not None
             self._result_table = self.db.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='attempt_results'").fetchone() is not None
             auth_type = next(row['type'] for row in self.db.execute('PRAGMA table_info(reservations)')
@@ -230,7 +241,7 @@ class ProductionStore:
         return db
 
     @classmethod
-    def create(cls, root, plan, authorization, *, execution_id=None, _activation='active'):
+    def create(cls, root, plan, authorization, *, execution_id=None, _activation='active', _film_spec=None):
         root = _root(root)
         validate_plan(plan)
         auth = Ledger._authorization(authorization)
@@ -262,13 +273,11 @@ class ProductionStore:
                 db.execute('INSERT INTO authorization_documents(id,value) VALUES(1,?)', (_dump(auth),))
                 db.executemany('INSERT INTO route_totals(route,used) VALUES(?,0)', [(route,) for route in auth['route_limits']])
                 cls._insert_execution(db, execution_id, plan, auth)
+                if _film_spec is not None:
+                    from fsf.production.film import install
+                    install(db, execution_id, _film_spec)
                 db.execute('COMMIT')
-                publish(root / 'store-manifest.json', seal({
-                    'schema_version': 'fsf_production_store_manifest_v1', 'store_uuid': store_id,
-                    'store_format': 'fsf_production_store_v1', 'database': 'state.sqlite3',
-                    'sqlite_profile': 'delete_full_v1', 'authorization_digest': auth['authorization_digest'],
-                    'activation_state': 'active', 'authority_epoch': 1, 'migration_receipt_digest': None,
-                }, 'manifest_digest'))
+                publish(root / 'store-manifest.json', _manifest_value(auth['authorization_digest'], store_id))
                 publish(registry_file, _registry_value(root, auth['authorization_digest'], store_id))
             except BaseException:
                 if db.in_transaction:
@@ -277,6 +286,42 @@ class ProductionStore:
             finally:
                 db.close()
         return cls(root, recovery=_activation != 'active')
+
+    @classmethod
+    def finish_film_initialization(cls, root, execution, spec):
+        """Repair only a pristine, committed store bound to the caller's film."""
+        root = _root(root)
+        auth = spec['authorization']['authorization_digest']
+        registry_file = authority_registry(root) / (auth + '.json')
+        manifest = root / 'store-manifest.json'
+        database = root / 'state.sqlite3'
+        with edit_lock(registry_file), edit_lock(root / '.store-create'):
+            if manifest.exists() and registry_file.exists():
+                return
+            _no_links(database)
+            db = cls._connect(database)
+            try:
+                row = db.execute("""SELECT m.uuid FROM meta m JOIN film_submission f ON f.execution=?
+                    JOIN authorization a ON a.id=1 WHERE m.version=1 AND m.activation='active'
+                    AND f.binding=? AND a.digest=? AND NOT EXISTS(SELECT 1 FROM attempts)
+                    AND NOT EXISTS(SELECT 1 FROM events)""", (execution, digest(spec), auth)).fetchone()
+                if (row is None or db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok'
+                        or db.execute('PRAGMA foreign_key_check').fetchone()):
+                    raise ProductionError('PRODUCTION_MIGRATION_RECOVERY_REQUIRED')
+                store_id = row['uuid']
+            except sqlite3.Error:
+                raise ProductionError('PRODUCTION_MIGRATION_RECOVERY_REQUIRED') from None
+            finally:
+                db.close()
+            expected_manifest = _manifest_value(auth, store_id)
+            expected_registry = _registry_value(root, auth, store_id)
+            for path, expected in ((manifest, expected_manifest), (registry_file, expected_registry)):
+                if path.exists() and read_json(path) != expected:
+                    raise ProductionError('PRODUCTION_AUTHORITY_CONFLICT')
+            if not manifest.exists():
+                publish(manifest, expected_manifest)
+            if not registry_file.exists():
+                publish(registry_file, expected_registry)
 
     @staticmethod
     def _validate_scope(plan, auth):
@@ -455,6 +500,9 @@ class ProductionStore:
         self.db.execute('UPDATE attempts SET evidence=?,artifact=? WHERE request=?', (data, artifact, request))
         return data, artifact
 
+    def film_binding(self, execution):
+        return self.db.execute('SELECT binding FROM film_submission WHERE execution=?', (execution,)).fetchone()[0]
+
     def claim(self, execution, task_id, *, owner, seconds=300):
         key(owner)
         integer(seconds, 1, 5400)
@@ -462,7 +510,7 @@ class ProductionStore:
             self._active(execution)
             row = self.task(execution, task_id)
             task = _load(row['value'])
-            if row['accepted'] or row['remaining']:
+            if row['accepted'] or row['remaining'] or row['status'] in {'excluded_optional','verified_reuse'}:
                 raise ProductionError('PRODUCTION_NOT_READY')
             if row['request']:
                 prior = self.attempt(row['request'])
@@ -506,9 +554,16 @@ class ProductionStore:
                     raise ProductionError('PRODUCTION_FORECAST_UNAFFORDABLE')
             epoch = row['epoch'] + 1
             request = digest([self.descriptor['store_uuid'], execution, task_id, epoch])
+            workorder = None
+            if self._film and frames:
+                from fsf.production.film import dispatch_binding
+                workorder, scope, request = dispatch_binding(self, execution, task_id, epoch)
             expires = math.ceil(time.time() + seconds)
             self.db.execute('INSERT INTO attempts(request,execution,task,epoch,owner,expires,status) VALUES(?,?,?,?,?,?,?)',
                             (request, execution, task_id, epoch, owner, expires, 'reserved'))
+            if workorder is not None:
+                self.db.execute('INSERT INTO film_attempts(execution,workorder,attempt,request,scope) VALUES(?,?,?,?,?)',
+                                (execution, workorder, epoch, request, scope))
             slot = (task['logical_shot_id'], task['segment_id'], round_value) if frames else (None, None, None)
             self.db.execute('''INSERT INTO reservations(request,authorization,execution,shot,segment,round,route,worst,
                             frames,status,binding,essential) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
@@ -543,9 +598,47 @@ class ProductionStore:
             updated = self.db.execute("UPDATE attempts SET outbox_state='sending' WHERE request=? AND outbox_state='prepared'", (request,))
             if updated.rowcount != 1:
                 raise ProductionError('PRODUCTION_RECONCILE_REQUIRED')
-            self.db.execute("UPDATE attempts SET status='submitted' WHERE request=?", (request,))
-            self.db.execute("UPDATE tasks SET status='submitted' WHERE execution=? AND id=?", (prior['execution'], prior['task']))
+            status = 'unknown' if self._film else 'submitted'
+            self.db.execute("UPDATE attempts SET status=? WHERE request=?", (status, request))
+            self.db.execute("UPDATE tasks SET status=? WHERE execution=? AND id=?", (status, prior['execution'], prior['task']))
             self._event('sending', prior['execution'], prior['task'], request, execution_change=True)
+
+    def retire_film_claim(self, request, revision, *, proof=None):
+        """Fence retirement with pre-contact state or a pinned adapter's negative receipt."""
+        import re
+        integer(revision)
+        with self.transaction():
+            if not self._film:
+                raise ProductionError('PRODUCTION_RECONCILE_REQUIRED')
+            indexed = self.db.execute('SELECT * FROM film_attempts WHERE request=?', (request,)).fetchone()
+            if indexed is None or indexed['revision'] != revision:
+                raise ProductionError('EXECUTION_BINDING_CONFLICT')
+            prior = self._fence(request, indexed['attempt'])
+            state = self.db.execute('SELECT state FROM outbox WHERE request=?', (request,)).fetchone()[0]
+            if proof is None:
+                if state != 'prepared' or prior['status'] != 'reserved':
+                    raise ProductionError('PRODUCTION_RECONCILE_REQUIRED')
+                proof = {'disposition': 'local_prepared', 'observed_at': int(time.time())}
+            else:
+                if (state != 'sending' or prior['status'] != 'unknown' or indexed['job'] is not None
+                        or not isinstance(proof, dict)
+                        or set(proof) != {'disposition', 'request_digest', 'scope', 'attempt_id',
+                                          'revision', 'observed_at', 'evidence_digest'}
+                        or proof['disposition'] != 'not_received' or proof['request_digest'] != request
+                        or proof['scope'] != indexed['scope']
+                        or type(proof['attempt_id']) is not int or proof['attempt_id'] != indexed['attempt']
+                        or type(proof['revision']) is not int or proof['revision'] != revision
+                        or type(proof['observed_at']) is not int or abs(time.time() - proof['observed_at']) > 30
+                        or not isinstance(proof['evidence_digest'], str)
+                        or not re.fullmatch('[0-9a-f]{64}', proof['evidence_digest'])):
+                    raise ProductionError('PRODUCTION_RECONCILE_REQUIRED')
+            self.db.execute("UPDATE attempts SET status='failed',outbox_state='observed' WHERE request=?", (request,))
+            self.db.execute("UPDATE tasks SET status='failed' WHERE execution=? AND id=?",
+                            (indexed['execution'], prior['task']))
+            payload = {'proof': proof, 'revision': revision, 'proof_digest': digest(proof)}
+            self._event('claim_retired', indexed['execution'], prior['task'], request,
+                        payload=payload, execution_change=True)
+        return {'request_digest': request, 'status': 'retired', 'proof_digest': payload['proof_digest']}
 
     def renew_prepared(self, request, epoch, *, owner, seconds=300):
         """Renew an unsent intent under its original fence; never release held fees."""
@@ -745,8 +838,9 @@ class ProductionStore:
         for row in self.db.execute('SELECT t.*,d.value FROM tasks t JOIN task_documents d ON d.execution=t.execution AND d.id=t.id'):
             task = _load(row['value'])
             actual = self.db.execute('''SELECT count(*) FROM dependencies d JOIN tasks t
-                ON d.execution=t.execution AND d.parent=t.id WHERE d.execution=? AND d.task=? AND t.accepted IS NULL''',
-                                     (row['execution'], row['id'])).fetchone()[0]
+                ON d.execution=t.execution AND d.parent=t.id WHERE d.execution=? AND d.task=? AND t.accepted IS NULL
+                AND (NOT ? OR t.status<>'verified_reuse')''',
+                                     (row['execution'], row['id'], self._film)).fetchone()[0]
             if task['task_id'] != row['id'] or task['logical_shot_id'] != row['shot'] or actual != row['remaining']:
                 raise ProductionError('PRODUCTION_STORE_CORRUPT')
             if row['accepted']:
@@ -769,6 +863,8 @@ class ProductionStore:
         return {'authorized_for_new_work': False, 'existing_costs_retained': True}
 
     def invalidate(self, execution, changed):
+        if self._film:
+            raise ProductionError('EXECUTION_BINDING_CONFLICT')
         from collections import deque
         affected = set()
         pending = deque(changed)
@@ -808,7 +904,8 @@ class ProductionStore:
             (SELECT count(*) FROM attempts a WHERE a.execution=t.execution AND a.task=t.id) AS attempts
             FROM tasks t JOIN task_documents d ON d.execution=t.execution AND d.id=t.id
             JOIN rounds r ON r.execution=t.execution AND r.shot=t.shot
-            LEFT JOIN reservations res ON res.request=t.request WHERE t.accepted IS NULL''')
+            LEFT JOIN reservations res ON res.request=t.request WHERE t.accepted IS NULL
+            AND (NOT ? OR t.status NOT IN ('excluded_optional','verified_reuse'))''', (self._film,))
         for row in rows:
             task = _load(row['value'])
             count = maximum - row['round'] + 1 - int(row['prior_round'] == row['round']) if task['generated_frames'] else 3 - row['attempts']

@@ -26,6 +26,24 @@ INSTALL_NETWORK = {'FSF_REMOTE_INSTALL_HTTP_PROXY':'HTTP_PROXY',
                    'FSF_REMOTE_INSTALL_CA':'SSL_CERT_FILE'}
 
 
+def worker_credentials(required_names, authorized_names, *, source, resolve_secret=None):
+    values = {}
+    for name in required_names:
+        if name not in authorized_names or name in {'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'}:
+            raise RemoteError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
+        value = source.get(name)
+        if not value and resolve_secret is not None:
+            try:
+                value = resolve_secret(name)
+            except Exception:
+                raise RemoteError('REMOTE_HOST_SECRET_ACCESS_FAILED') from None
+        if not isinstance(value, str) or not value:
+            raise RemoteError('REMOTE_CREDENTIAL_MISSING')
+        if name not in INSTALL_NETWORK:
+            values[name] = value
+    return values
+
+
 def install_environment(base, authorized_names, *, source=None):
     """Copy only explicitly authorized host installation settings, never evidence."""
     source = os.environ if source is None else source

@@ -35,6 +35,8 @@ def main(argv=None):
     validate.add_argument("recipe")
     reports=commands.add_parser('operation-reports',help='Read immutable local operation evidence; never submit')
     reports.add_argument('directory')
+    capability = commands.add_parser('secret-capabilities', help='Inspect credential delivery capability locally')
+    capability.add_argument('profile')
     revalidation=commands.add_parser('revalidate',help='Reverify existing bytes with a host-authorized verifier; no generation')
     for name in ('request','outputs','original-result','visible','out'):
         revalidation.add_argument('--'+name,required=True,action=_Once)
@@ -221,6 +223,10 @@ def main(argv=None):
                         action='diagnostics' if args.operation=='diagnostics-v2' else 'cancel' if args.operation=='cancel-v2' else 'fetch' if args.operation=='fetch-v2' else 'status',recover=getattr(args,'recover',False))
                     if result['status']=='cancel_unsupported':
                         print(json.dumps({'ok':False,'result':result}));return 3
+        elif args.operation=='secret-capabilities':
+            from fsf.remote.destination import secret_capabilities
+            from fsf.remote.v2 import validate_profile as validate_remote_profile
+            result=secret_capabilities(validate_remote_profile(read_json(args.profile)))
         elif args.operation=='operation-reports':
             from fsf.remote.diagnostics import inspect
             result={'reports':inspect(Path(args.directory)),'new_submissions':0}

@@ -26,7 +26,10 @@ def _saved(api,ref,version=None):
     request=ApiGetKernelRequest();request.user_name=owner
     request.kernel_slug=slug+('/'+str(version) if version is not None else '')
     with api.build_kaggle_client() as client:
-        return client.kernels.kernels_api_client.get_kernel(request)
+        saved = client.kernels.kernels_api_client.get_kernel(request)
+    from fsf.remote.destination import existing_slot_proof
+    existing_slot_proof(saved.metadata, ref=ref, version=version)
+    return saved
 
 
 def _version_status(api,ref,version):
@@ -68,9 +71,9 @@ def call(value):
     owner=os.environ.get(profile['settings'].get('owner_env','KAGGLE_USERNAME')) or api.config_values.get('username')
     if not owner or not re.fullmatch('[A-Za-z0-9_-]+',owner):raise RemoteError('REMOTE_KAGGLE_OWNER')
     operation=value['operation'];expected=metadata(request,profile,owner)
-    from fsf.remote.destination import authorize_create
+    from fsf.remote.destination import authorize_create, resolve
     authorize_create(profile,owner=owner)
-    fixed_slot=bool(profile['settings'].get('worker_notebook'))
+    fixed_slot=bool(resolve(profile)['slug'])
     browser_activation=profile['settings'].get('activation_mode')=='agent_browser'
     if browser_activation and not fixed_slot:raise RemoteError('REMOTE_KAGGLE_WORKER_NOTEBOOK')
     if operation=='prepare':
@@ -80,6 +83,12 @@ def call(value):
             current=_version_status(api,expected['id'],previous.metadata.current_version_number)
             raw=str(getattr(current.status,'name',current.status)).lower().rsplit('.',1)[-1]
             if raw in {'running','queued'}:raise RemoteError('REMOTE_KAGGLE_SLOT_BUSY')
+            if profile.get('destination') and not browser_activation:
+                proof=_slot_binding(request,profile,previous.metadata)
+                path=directory/'kaggle-slot-binding.json'
+                if path.exists() and read_json(path)!=proof:
+                    raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
+                write_json(path,proof)
         write_json(directory/'worker.ipynb',notebook(request,value['locator']))
         write_json(directory/'kernel-metadata.json',expected)
         if browser_activation:
@@ -97,6 +106,8 @@ def call(value):
         if fixed_slot:
             previous=_saved(api,expected['id'])
             if not previous.metadata.is_private:raise RemoteError('REMOTE_KAGGLE_POLICY')
+            if profile.get('destination') and read_json(directory/'kaggle-slot-binding.json')!=_slot_binding(request,profile,previous.metadata):
+                raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
             current=_version_status(api,expected['id'],previous.metadata.current_version_number)
             raw=str(getattr(current.status,'name',current.status)).lower().rsplit('.',1)[-1]
             if raw in {'running','queued'}:raise RemoteError('REMOTE_KAGGLE_SLOT_BUSY')
@@ -104,7 +115,10 @@ def call(value):
         kwargs={'acc':None}
         if not request['policy']['gpu']:kwargs['timeout']=str(request['policy']['deadline_seconds'])
         reply=api.kernels_push(str(directory),**kwargs)
-        if reply.error or type(reply.version_number) is not int or reply.version_number<1 or (not fixed_slot and reply.version_number!=1):raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
+        if (reply.error or type(reply.version_number) is not int or reply.version_number<1
+                or (not fixed_slot and reply.version_number!=1)
+                or (fixed_slot and profile.get('destination') and reply.version_number!=previous.metadata.current_version_number+1)):
+            raise RemoteError('REMOTE_KAGGLE_VERSION_AMBIGUOUS')
         return {'kernel':expected['id'],'version':reply.version_number,'request_digest':request['request_digest']}
     if fixed_slot:
         if operation=='reconcile':
@@ -135,6 +149,12 @@ def call(value):
     status={'complete':'completed','completed':'completed','running':'running','queued':'queued',
             'error':'failed','failed':'failed','cancelacknowledged':'cancelled','canceled':'cancelled','cancelled':'cancelled'}.get(raw,'unknown')
     return {'status':status}
+
+
+def _slot_binding(request, profile, metadata):
+    return seal({'request_digest': request['request_digest'], 'profile_digest': digest(profile),
+                 'ref': metadata.ref, 'kernel_id': metadata.id,
+                 'previous_version': metadata.current_version_number}, 'binding_digest')
 
 
 def main():

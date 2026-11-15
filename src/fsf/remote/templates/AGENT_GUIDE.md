@@ -60,7 +60,7 @@ declare its setup and output contract, and test it before approving its digest.
 
 This Python example prepares operator files only. Run it from a directory with
 the installed FSF package. Place an audited wheel built from the same source at
-`runtime/free_studio_flow-0.1.0rc12-py3-none-any.whl`. A released wheel lacking
+`runtime/free_studio_flow-0.1.0rc13-py3-none-any.whl`. A released wheel lacking
 these modules cannot be used as a worker. Check the version of your build.
 
 ```python
@@ -96,7 +96,7 @@ production plan use the actual parent identities and digests; the opt-in remote
 executor supplies them directly from PlanExecutor.
 
 ```text
-fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc12-py3-none-any.whl --profile config/local.profile.json --out state
+fsf remote prepare definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc13-py3-none-any.whl --profile config/local.profile.json --out state
 fsf remote diagnose --profile config/local.profile.json --probe
 ```
 
@@ -118,7 +118,7 @@ From a source checkout supporting `preflight`, use a worker wheel built from
 that same checkout:
 
 ```text
-fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc12-py3-none-any.whl --profile config/local.profile.json
+fsf remote preflight definition.json --recipe config/cpu.recipe.json --inputs inputs --wheel runtime/free_studio_flow-0.1.0rc13-py3-none-any.whl --profile config/local.profile.json
 ```
 
 This read-only check validates declarations, authorization, QC contract digests
@@ -602,3 +602,34 @@ Fixture scope records machine decisions for a controlled local test.
 Delivery mode refuses this gate. The metric and reference helpers require
 independent observations supplied by the caller. Human review remains a
 separate state.
+# Full-feature local workflow
+
+An operator-approved `fsf_film_submission_v2` document binds the production plan,
+authorization, driver, routes, workorders, and sealed `fsf_feature_plan_v1`.
+The feature carries a single exact frame clock and contiguous chapter and shot
+ranges. Each shot binds a unique beat, a story purpose, location, an explicit
+dialogue policy, input asset IDs and before/after state. Include the canonical
+shot JSON as the workorder's `story` asset, serialized with sorted keys and no
+extra whitespace, and bind its SHA-256 in the workorder and task input digest.
+
+Use the following commands with an approved local submission and state directory.
+
+```shell
+fsf production film-submit feature.json --out feature-state --dry-run
+fsf production film-submit feature.json --out feature-state --seconds 300
+fsf production film-status feature-state
+fsf production film-resume feature-state --seconds 300
+fsf production feature-assemble feature-state --out feature.mp4
+```
+
+Retry an uncertain outcome with `film-resume` so the existing attempt can be
+reconciled. A matching submission key returns the original execution; changing
+its bound data requires a newly approved submission. An unknown quality verdict
+keeps dependent work blocked. An optional pinned local evaluator can bind
+reference, route, capability and frame samples to the existing quality gate.
+Advisory output cannot authorize acceptance.
+
+The video-only assembly receipt verifies frame timing and bytes. Supply actual
+A/V observations to `feature-av-check` and the approved continuous review to
+`feature-review` when those records are available. Synthetic receipts carry no
+neural, listening or human-review qualification.

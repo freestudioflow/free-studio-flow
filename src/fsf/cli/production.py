@@ -11,6 +11,26 @@ from fsf.remote.contracts import RemoteError
 def main(argv=None):
     parser = _Parser(prog="fsf production")
     commands = parser.add_subparsers(dest="operation",required=True)
+    submit = commands.add_parser("film-submit", help="Preflight and start an operator-approved full film")
+    submit.add_argument("spec")
+    submit.add_argument("--out", required=True, action=_Once)
+    submit.add_argument("--dry-run", action="store_true")
+    submit.add_argument("--seconds", type=_integer, action=_Once)
+    resume = commands.add_parser("film-resume", help="Continue a film execution in a bounded batch")
+    resume.add_argument("store")
+    resume.add_argument("--seconds", type=_integer, action=_Once)
+    commands.add_parser("film-status", help="Read the durable dispatch index").add_argument("store")
+    fetch = commands.add_parser("film-fetch", help="Verify and locate a retained accepted artifact")
+    fetch.add_argument("store")
+    fetch.add_argument("workorder")
+    fetch.add_argument("attempt", type=_integer)
+    retire = commands.add_parser("film-retire-prepared", help="Retire a proven unsent claim with its current revision")
+    cancel_film = commands.add_parser("film-cancel", help="Request cancellation without clearing unconfirmed fees")
+    for command in (retire, cancel_film):
+        command.add_argument("store")
+        command.add_argument("workorder")
+        command.add_argument("attempt", type=_integer)
+    retire.add_argument("--revision", required=True, type=_integer, action=_Once)
     imported = commands.add_parser("import-control",help="Import a full control movie without conversion")
     imported.add_argument("source")
     imported.add_argument("--out",required=True,action=_Once)
@@ -164,9 +184,89 @@ def main(argv=None):
     rollup=commands.add_parser('quality-rollup',help='Require exact segment/seam/chapter/film coverage without hiding failures')
     rollup.add_argument('manifest');rollup.add_argument('--reports',required=True,action=_Once)
     rollup.add_argument('--out',required=True,action=_Once)
+    lt = commands.add_parser('long-take-measure', help='Measure a local analytic whitebox trajectory')
+    for field in ('scene', 'action', 'camera', 'observations'):
+        lt.add_argument(field)
+    lt.add_argument('--out', required=True, action=_Once)
+    commands.add_parser('long-take-probe', help='Validate bound single and paired segment observations').add_argument('observations')
+    commands.add_parser('long-take-matrix', help='Inspect the declared cross-model test matrix').add_argument('matrix')
+    lt_review = commands.add_parser('long-take-review', help='Check an operator review against current artifact bytes')
+    for field in ('artifact', 'review', 'policy'):
+        lt_review.add_argument(field)
+    lt_media = commands.add_parser('long-take-media', help='Measure a video-only long-take master')
+    lt_media.add_argument('artifact')
+    lt_media.add_argument('--work', required=True, action=_Once)
+    lt_media.add_argument('--seconds', type=_integer, action=_Once)
+    av = commands.add_parser('feature-av-check', help='Validate bounded rational A/V measurements')
+    av.add_argument('measurements')
+    av.add_argument('--pcm-files', action=_Once)
+    advice = commands.add_parser('feature-advisory', help='Run an operator advisory command with bounded images')
+    advice.add_argument('config')
+    deliver_feature = commands.add_parser('feature-assemble', help='Assemble and reverify a locally accepted feature')
+    deliver_feature.add_argument('store')
+    deliver_feature.add_argument('--out', required=True, action=_Once)
+    deliver_feature.add_argument('--seconds', type=_integer, action=_Once)
+    review_feature = commands.add_parser('feature-review', help='Verify full-playback review bindings')
+    for field in ('store', 'artifact', 'review', 'policy'):
+        review_feature.add_argument(field)
     try:
         args = parser.parse_args(argv)
-        if args.operation == "resource-profile":
+        if args.operation == 'feature-assemble':
+            from fsf.production.feature_delivery import assemble
+            result = assemble(args.store, args.out, seconds=300 if args.seconds is None else args.seconds)
+        elif args.operation == 'feature-review':
+            import time
+            from fsf.production.feature_delivery import review_feature
+            result = review_feature(args.store, args.artifact, read_json(args.review),
+                                    read_json(args.policy), now=int(time.time()))
+        elif args.operation == 'feature-av-check':
+            from fsf.production.feature_quality import av_alignment, verify_pcm_alignment
+            value = read_json(args.measurements)
+            if args.pcm_files:
+                pcm = read_json(args.pcm_files)
+                result = verify_pcm_alignment(value, pcm['cuts'], pcm['final'])
+            else:
+                result = av_alignment(value)
+        elif args.operation == 'feature-advisory':
+            from fsf.production.feature_quality import advisory_call
+            config = read_json(args.config)
+            result = advisory_call(config['images'], config['argv'], seconds=config.get('seconds', 120))
+        elif args.operation == 'long-take-measure':
+            from fsf.production.long_take import measure
+            value = read_json(args.observations)
+            result = measure(read_json(args.scene), read_json(args.action), read_json(args.camera),
+                             value['frames'], core_ranges=value['core_ranges'])
+            with edit_lock(args.out) as path:
+                if path.exists():
+                    raise ProductionError('PRODUCTION_TARGET_EXISTS')
+                publish(path, result)
+        elif args.operation == 'long-take-probe':
+            from fsf.production.long_take import probe
+            result = probe(read_json(args.observations))
+        elif args.operation == 'long-take-matrix':
+            from fsf.production.long_take import whitebox_matrix
+            value = read_json(args.matrix)
+            result = whitebox_matrix(value['model_locks'], value['subjects'], value['runs'])
+        elif args.operation == 'long-take-review':
+            import time
+            from fsf.production.long_take import review_take
+            result = review_take(args.artifact, read_json(args.review), read_json(args.policy), now=int(time.time()))
+        elif args.operation == 'long-take-media':
+            from fsf.production.long_take import technical_take
+            result = technical_take(args.artifact, args.work, seconds=300 if args.seconds is None else args.seconds)
+        elif args.operation.startswith("film-"):
+            from fsf.production.film import run
+            if args.operation == "film-submit":
+                result = run(args.operation, args.out, spec=read_json(args.spec), dry_run=args.dry_run,
+                             seconds=300 if args.seconds is None else args.seconds)
+            elif args.operation == "film-resume":
+                result = run(args.operation, args.store, seconds=300 if args.seconds is None else args.seconds)
+            elif args.operation in {"film-fetch", "film-retire-prepared", "film-cancel"}:
+                result = run(args.operation, args.store, workorder=args.workorder, attempt=args.attempt,
+                             revision=getattr(args, 'revision', None))
+            else:
+                result = run(args.operation, args.store)
+        elif args.operation == "resource-profile":
             from fsf.production.resources import resource_profile
             result = resource_profile(args.name)
             with edit_lock(args.out) as path:

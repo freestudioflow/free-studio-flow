@@ -12,6 +12,8 @@ def resolve(profile):
     if profile.get('destination') and profile['transport'] != 'kaggle':
         if policy['intent'] != 'existing' or policy['model_sources'] or policy['secret_aliases']:
             raise RemoteError('REMOTE_DESTINATION_CONFLICT')
+    if profile.get('destination') and profile['transport'] == 'kaggle' and not slug:
+        raise RemoteError('REMOTE_DESTINATION_CONFLICT')
     if policy['intent'] == 'create_private' and (not slug or settings.get('activation_mode', 'api_push') != 'api_push'):
         raise RemoteError('REMOTE_DESTINATION_CONFLICT')
     return {'slug': slug, **policy}
@@ -23,9 +25,32 @@ def require_secret_capability(profile):
         raise RemoteError('REMOTE_SECRET_CAPABILITY_UNAVAILABLE')
 
 
+def secret_capabilities(profile):
+    destination = resolve(profile)
+    transport = profile['transport']
+    mode = profile['settings'].get('activation_mode', 'api_push') if transport == 'kaggle' else 'worker'
+    local = transport == 'local'
+    return {'transport': transport, 'submission_mode': mode,
+            'operator_environment': {'status': 'available' if local else 'unverified',
+                                     'verification': 'recipe_and_policy' if local else 'worker_delivery_unverified'},
+            'provider_attachment': {'status': 'unavailable', 'verification': 'unverified',
+                                    'aliases': list(destination['secret_aliases'])},
+            'model_sources': list(destination['model_sources'])}
+
+
+def existing_slot_proof(metadata, *, ref, version=None):
+    actual = getattr(metadata, 'current_version_number', None)
+    if (getattr(metadata, 'ref', None) != ref or getattr(metadata, 'is_private', None) is not True
+            or type(actual) is not int or actual < 1
+            or (version is not None and actual != version)
+            or type(getattr(metadata, 'id', None)) is not int or metadata.id < 1):
+        raise RemoteError('REMOTE_DESTINATION_UNVERIFIED')
+    return actual
+
+
 def new_slot_proof(proof, *, owner, slug):
     expected = {'owner': owner, 'slug': slug, 'state': 'absent', 'can_create_private': True}
-    if proof != expected:
+    if not isinstance(proof,dict) or proof.get('can_create_private') is not True or proof != expected:
         raise RemoteError('REMOTE_DESTINATION_UNVERIFIED')
     return expected
 

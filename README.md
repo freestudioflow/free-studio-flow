@@ -9,7 +9,7 @@ AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocu
 License: Apache-2.0. See [LICENSE](LICENSE).
 
 <!-- pypi-release-status:start -->
-Source version in this branch: **`0.1.0rc12`**.
+Source version in this branch: **`0.1.0rc13`**.
 
 Latest verified PyPI release: **[`0.1.0rc12`](https://pypi.org/project/free-studio-flow/0.1.0rc12/)**,
 published from tag **[`v0.1.0rc12`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc12)**
@@ -19,6 +19,15 @@ at commit `32517bd28237f23d4cbac9682e375ff52bfaa675`.
 python -m pip install "free-studio-flow==0.1.0rc12"
 ```
 <!-- pypi-release-status:end -->
+
+### Additions and accepted limits in rc13
+
+Version 0.1.0rc13 is a candidate awaiting publication. It adds one-submission
+feature planning, a persistent workorder and attempt index, bounded quality
+checks, and recoverable assembly. The 120-minute exercise verified a synthetic
+64×64 video-only delivery and zero duplicate dispatches or charges on reuse.
+See the [RC13 candidate release notes](docs/RELEASE.md#candidate-release-notes-010rc13)
+for the accepted scope and pending qualifications.
 
 ### Additions and accepted limits in rc12
 

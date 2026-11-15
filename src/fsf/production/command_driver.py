@@ -21,6 +21,29 @@ class CommandDriver:
     """
     def __init__(self,config,*,plan,state_root):
         config=copy.deepcopy(config);plan=copy.deepcopy(plan)
+        self.validate_config(config)
+        self.root=_root(state_root);self.artifacts=_root(config['artifact_root'])
+        self.plan=plan;self.config=config
+        self.adapter=CommandAdapter({'settings':config['settings']},self.root/'no-store-config.json')
+        self.plan_digest=plan['plan_digest'];self.policy_digest=plan['policy_digest']
+        self.tasks={t['task_id']:copy.deepcopy(t) for t in plan['tasks']}
+        self._execution_pins = None
+        self._identity_cache = {}
+        self._pin_config_digest = None
+        self.last_file_check_mode = 'fresh_per_call_hash'
+        self._execution_deadline = None
+        self._cooperative_budget = False
+        self._submission_admitted = False
+        binding=self.root/'driver-binding.json'
+        snapshot={'driver_digest':digest(config),'plan_digest':self.plan_digest,
+                  'policy_digest':self.policy_digest}
+        with edit_lock(binding):
+            if binding.exists():
+                if read_json(binding)!=snapshot:raise ProductionError('PRODUCTION_PROVIDER_CHANGED')
+            else:publish(binding,snapshot)
+
+    @staticmethod
+    def validate_config(config):
         reject_inline_credentials(config)
         base_fields = {'schema_version','settings','artifact_root','evaluator_digest'}
         version = config.get('schema_version') if isinstance(config,dict) else None
@@ -37,28 +60,6 @@ class CommandDriver:
         validate_settings(config['settings'])
         if not isinstance(config['evaluator_digest'],str) or not re.fullmatch('[0-9a-f]{64}',config['evaluator_digest']):
             raise ProductionError('PRODUCTION_DRIVER_INVALID')
-        self.root=_root(state_root);self.artifacts=_root(config['artifact_root'])
-        self.plan=plan;self.config=config
-        self.adapter=CommandAdapter({'settings':config['settings']},self.root/'no-store-config.json')
-        self.plan_digest=plan['plan_digest'];self.policy_digest=plan['policy_digest']
-        self.tasks={t['task_id']:copy.deepcopy(t) for t in plan['tasks']}
-        self._execution_pins = None
-        self._identity_cache = {}
-        self._pin_config_digest = None
-        self.last_file_check_mode = 'fresh_per_call_hash'
-        self._execution_deadline = None
-        self._cooperative_budget = False
-        self._submission_admitted = False
-        # Persist the operator implementation before even a reconcile call.
-        # A crash before provider.json must not allow another executable to
-        # reinterpret the same durable submission intent.
-        binding=self.root/'driver-binding.json'
-        snapshot={'driver_digest':digest(config),'plan_digest':self.plan_digest,
-                  'policy_digest':self.policy_digest}
-        with edit_lock(binding):
-            if binding.exists():
-                if read_json(binding)!=snapshot:raise ProductionError('PRODUCTION_PROVIDER_CHANGED')
-            else:publish(binding,snapshot)
 
     @contextmanager
     def bounded_execution(self, deadline, *, cooperative=False):
@@ -117,13 +118,19 @@ class CommandDriver:
         folder=self.root/request_id;folder.mkdir(exist_ok=True);_no_links(folder)
         return folder
 
+    def _request(self, task, request_id):
+        return {'request_digest':request_id,'production_plan_digest':self.plan_digest,
+                'policy_digest':self.policy_digest,'task':task}
+
+    def _locator(self, operation, request_id):
+        return {'artifact_root': str(self.artifacts)}
+
     def _call(self,operation,task,request_id,remote=None):
         if self._pin_config_digest is not None and digest(self.config)!=self._pin_config_digest:
             raise ProductionError('PRODUCTION_PROVIDER_CHANGED')
         if not isinstance(task,dict) or task!=self.tasks.get(task.get('task_id')):
             raise ProductionError('PRODUCTION_BINDING_CHANGED')
-        request={'request_digest':request_id,'production_plan_digest':self.plan_digest,
-                 'policy_digest':self.policy_digest,'task':task}
+        request=self._request(task, request_id)
         timeout = None
         if self._execution_deadline is not None:
             timeout = self._execution_deadline - _processing_time()
@@ -131,7 +138,7 @@ class CommandDriver:
                 raise ProductionError('PRODUCTION_DEADLINE_EXCEEDED')
             if self._cooperative_budget:
                 timeout=None
-        return self.adapter.call(operation,request,{'artifact_root':str(self.artifacts)},self._folder(request_id),remote,
+        return self.adapter.call(operation,request,self._locator(operation, request_id),self._folder(request_id),remote,
                                  timeout_seconds=timeout)
 
     def _save_identity(self,request_id,identity):

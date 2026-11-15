@@ -139,7 +139,8 @@ def main(argv=None):
                 for name in request['recipe']['environment']['credential_env_names']:
                     if name not in request['policy']['credential_env_names']:raise ValueError('REMOTE_CREDENTIAL_NOT_AUTHORIZED')
                     value=os.environ.get(name)
-                    if not value and secret_client is not None:
+                    if (not value and secret_client is not None
+                            and request['recipe'].get('schema_version') != 'fsf_remote_recipe_v4'):
                         try:value=secret_client.get_secret(name)
                         except Exception:raise ValueError('REMOTE_HOST_SECRET_ACCESS_FAILED') from None
                     if not value:raise ValueError('REMOTE_CREDENTIAL_MISSING')

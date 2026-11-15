@@ -51,6 +51,13 @@ def verify(outputs, request, visible, *, registry=None):
     spec = request['recipe']['execution_requirements']['model']
     entry = registry_entry(spec['verifier_id'], spec['verifier_digest'], registry=registry)
     value = read_json(safe_path(outputs, spec['receipt_path']))
+    if value.get('schema_version') == 'fsf_voice_receipt_v1':
+        from fsf.remote.voice_receipt import verify_voice
+        verify_voice(outputs, request, value)
+        if value['schema_version'] not in entry['receipt_versions']:
+            raise RemoteError('REMOTE_VERIFIER_UNTRUSTED')
+        _run_verifier(entry, outputs, request, value)
+        return value
     fields = {'schema_version', 'request_digest', 'lock_digest', 'capability_digest', 'outputs',
               'devices', 'model_calls', 'started_ns', 'finished_ns', 'runtime_metrics', 'receipt_digest'}
     if (set(value) != fields or value['schema_version'] not in entry['receipt_versions']
@@ -81,6 +88,11 @@ def verify(outputs, request, visible, *, registry=None):
         if (type(event) not in (int, float) or not math.isfinite(event) or event <= 0
                 or type(peak) is not int or peak <= 0):
             raise RemoteError('REMOTE_MODEL_EVIDENCE')
+    _run_verifier(entry, outputs, request, value)
+    return value
+
+
+def _run_verifier(entry, outputs, request, value):
     # The host command receives validated data, never an executable path from media.
     with tempfile.TemporaryDirectory(prefix='fsf-verifier-') as temporary:
         root = Path(temporary)
@@ -99,7 +111,6 @@ def verify(outputs, request, visible, *, registry=None):
             raise RemoteError('REMOTE_VERIFIER_FAILED') from None
         if decision != {'accepted': True, 'receipt_digest': value['receipt_digest']}:
             raise RemoteError('REMOTE_VERIFIER_FAILED')
-    return value
 
 
 def revalidate(outputs, request, visible, *, original_result, destination, registry=None):
