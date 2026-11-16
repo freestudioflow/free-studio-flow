@@ -5,7 +5,7 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc13`**, available on PyPI.
+The current published pre-release is **`0.1.0rc14`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
@@ -14,8 +14,14 @@ pins leave rc/a.
 
 ## Release notes (0.1.0rc14)
 
-Version `0.1.0rc14` is a release candidate under local verification. Install
-the candidate wheel or use the source checkout to try the new commands.
+Version `0.1.0rc14` is published from tag `v0.1.0rc14` at commit
+`fa63ee91f55ddb5c0be1c9b215657497ba598be4`. GitHub and PyPI serve the same
+verified files. Use matching parent and worker builds.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| free_studio_flow-0.1.0rc14-py3-none-any.whl | 685135 | `1ab2f9aaf1b503b69a7842f710b19dfcf5597c106bfc51613bb4311c1a2a709a` |
+| free_studio_flow-0.1.0rc14.tar.gz | 919355 | `ca85d57ecac2f4eb4713261a6b8c6310629555e82081ed23a17d3fb2e90d4766` |
 
 - The README starts with installation, a playable four-second synthetic MP4,
   playback, job status and job-contract verification. The standalone

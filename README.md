@@ -5,16 +5,15 @@ generation and review, and assembles and verifies the finished video.
 
 ## Try a video locally
 
-Use Python 3.11+ and put `ffmpeg` and `ffprobe` on your PATH. Run these commands
-in a folder containing the RC14 candidate wheel. From a source checkout, you
-can use `pip install .` in place of the wheel installation. The local synthetic
-demo needs no account, API key, or GPU.
+Use Python 3.11+ and put `ffmpeg` and `ffprobe` on your PATH. From a source
+checkout, you can use `pip install .` in place of the PyPI package. The local
+synthetic demo needs no account, API key, or GPU.
 
 **Windows (PowerShell)**
 
 ```powershell
 python -m venv .venv
-.venv/Scripts/python -m pip install ./free_studio_flow-0.1.0rc14-py3-none-any.whl
+.venv/Scripts/python -m pip install "free-studio-flow==0.1.0rc14"
 .venv/Scripts/python -m fsf.cli demo --out demo-output
 ```
 
@@ -22,7 +21,7 @@ python -m venv .venv
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install ./free_studio_flow-0.1.0rc14-py3-none-any.whl
+.venv/bin/python -m pip install "free-studio-flow==0.1.0rc14"
 .venv/bin/python -m fsf.cli demo --out demo-output
 ```
 
@@ -84,18 +83,18 @@ when you are ready to configure a backend.
 
 ## Installation and releases
 
-RC14 is a candidate. The PyPI install below selects the latest verified
-release. For RC14 changes and accepted limits, see [release notes](docs/RELEASE.md#release-notes-010rc14).
+The PyPI install below selects the latest verified release. For RC14 changes,
+artifact digests, and accepted limits, see [release notes](docs/RELEASE.md#release-notes-010rc14).
 
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc14`**.
 
-Latest verified PyPI release: **[`0.1.0rc13`](https://pypi.org/project/free-studio-flow/0.1.0rc13/)**,
-published from tag **[`v0.1.0rc13`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc13)**
-at commit `6ae9419c1888ac4c5dac8a325582f397a8b808df`.
+Latest verified PyPI release: **[`0.1.0rc14`](https://pypi.org/project/free-studio-flow/0.1.0rc14/)**,
+published from tag **[`v0.1.0rc14`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc14)**
+at commit `fa63ee91f55ddb5c0be1c9b215657497ba598be4`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc13"
+python -m pip install "free-studio-flow==0.1.0rc14"
 ```
 <!-- pypi-release-status:end -->
 
@@ -903,7 +902,7 @@ filesystem replacement. Consumers must re-check files when using them.
 <summary>Release highlights and worker setup</summary>
 
 Full per-version changelogs, artifact digests, accepted scopes, and pending
-qualifications live in [docs/RELEASE.md](docs/RELEASE.md) (`0.1.0rc13`, `0.1.0rc12`,
+qualifications live in [docs/RELEASE.md](docs/RELEASE.md) (`0.1.0rc14`, `0.1.0rc13`, `0.1.0rc12`,
 `0.1.0rc11`, `0.1.0rc10`, and earlier).
 
 See [Indexed production workflows](docs/PRODUCTION_WORKFLOWS.md) for SQLite
