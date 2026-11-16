@@ -22,11 +22,11 @@
       "executor_id": "local.process.generate",
       "transport": "local",
       "tool_name": "studio.video.generate",
-      "display_name": "Operator-added local process CLI",
+      "display_name": "Operator-added local process CLI (replace worker path with your script)",
       "kind": "process",
       "command_args": [
         "python",
-        "/opt/fsf-tools/sample_worker.py",
+        "/path/to/your_worker.py",
         "--shot",
         "{shot_id}",
         "--out",

@@ -12,6 +12,35 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Release notes (0.1.0rc14)
+
+Version `0.1.0rc14` is a release candidate under local verification. Install
+the candidate wheel or use the source checkout to try the new commands.
+
+- The README starts with installation, a playable four-second synthetic MP4,
+  playback, job status and job-contract verification. The standalone
+  `verify <clip>` entry point remains available.
+- `status --json` reports the last recorded local state, active workorders
+  and attempts, blockers and the next action. It reads the job without
+  writing or dispatching. Use the original plan for jobs stored separately
+  from their plan, and rerun the original execute command to resume.
+- `sheet new` starts a DOCX shot list. The synthetic Handoff tour demonstrates
+  retry, continuity and review. Active workorder listing, status and fulfillment
+  share canonical workorder validation. Fulfillment validates an exclusive
+  temporary receipt before atomically publishing the canonical result.
+- Accepted scope is local synthetic media on Windows and Linux. Demo playback
+  needs working `ffmpeg` and `ffprobe`. Synthetic Handoff review covers the
+  fixture. Production shots still require operator authorization and their
+  applicable review. macOS and real model output remain unqualified.
+- Receipt recovery covers process interruption before publication. Filesystem
+  power-loss durability and simultaneous manual receipts under different
+  filenames remain outside the verified scope. A completed status records
+  execution state; media conformance is checked separately with `verify --job`.
+- Earlier limits remain open, including real three-minute single-shot and
+  120-minute audiovisual quality, semantic and human QC, designated GPU
+  qualification, Kaggle Secret attachment, private-slot proof, dataset uploads
+  above 64 MiB and missing historical evidence.
+
 ## Release notes (0.1.0rc13)
 
 Version `0.1.0rc13` is published from tag `v0.1.0rc13` at commit

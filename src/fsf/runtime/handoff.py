@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -176,6 +177,40 @@ def safe_resolve_artifact_path(raw_path: str, root_dir: Path) -> Path:
     return resolved
 
 
+def resolve_workorder_input(workorder: dict[str, Any], root: Path) -> Path:
+    """Resolve a sealed, workspace-relative Handoff input and verify its bytes."""
+    from fsf.core.asset_library import _no_links, _path_parts
+    from fsf.runtime.blender import sha
+
+    expected = canonical_contract_digest({k: v for k, v in workorder.items() if k != "workorder_digest"})
+    if workorder.get("workorder_digest") != expected:
+        raise HandoffIntegrityError("Workorder digest mismatch.")
+    task = workorder["task_payload"]
+    binding = task.get("input_artifact_sha256")
+    requirements = workorder.get("consistency_requirements") or {}
+    if not isinstance(binding, str) or not re.fullmatch("[0-9a-f]{64}", binding):
+        raise HandoffIntegrityError("Workorder input is not SHA-bound.")
+    if requirements.get("resolved_sha256") not in (None, binding):
+        raise HandoffIntegrityError("Workorder input differs from the continuity source.")
+    try:
+        root = root.resolve(strict=True)
+        path = root.joinpath(*_path_parts(task["input_artifact"]))
+        _no_links(path)
+        path.resolve(strict=True).relative_to(root.resolve(strict=True))
+        if not path.is_file():
+            raise ValueError()
+    except (OSError, ValueError, TypeError, KeyError):
+        raise HandoffSecurityError("Workorder input must be an in-workspace regular file.") from None
+    if sha(path) != binding:
+        raise HandoffIntegrityError("Workorder input SHA mismatch.")
+    return path
+
+
+def workorder_identity(job_id, run_id, step_id, attempt_id):
+    clean_job, clean_run, clean_step = (re.sub(r"[^A-Za-z0-9_-]", "_", str(x)) for x in (job_id, run_id, step_id))
+    return f"wo_{clean_job}_{clean_run}_{clean_step}_att{attempt_id}"
+
+
 def build_workorder(
     *,
     job_id: str,
@@ -192,6 +227,7 @@ def build_workorder(
     consistency_requirements: dict[str, Any] | None = None,
     video_condition: dict[str, Any] | None = None,
     condition_capability: dict[str, Any] | None = None,
+    input_binding: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     """Construct an authoritative fsf_workorder_v1.
 
@@ -201,16 +237,15 @@ def build_workorder(
     requirements_digest is used to verify the result's acknowledgement.
     """
     now = datetime.now(timezone.utc).isoformat()
-    clean_job = re.sub(r"[^A-Za-z0-9_-]", "_", str(job_id))
-    clean_run = re.sub(r"[^A-Za-z0-9_-]", "_", str(run_id))
-    clean_step = re.sub(r"[^A-Za-z0-9_-]", "_", str(step_id))
-    workorder_id = f"wo_{clean_job}_{clean_run}_{clean_step}_att{attempt_id}"
+    workorder_id = workorder_identity(job_id, run_id, step_id, attempt_id)
 
     if expected_media_contract and not expected_contract_digest:
         expected_contract_digest = canonical_contract_digest(expected_media_contract)
 
     # Sanitize task prompts/specs before emission (recursively handles dicts/lists/strings)
     scrubbed_task = sanitize_process_text(task_payload)
+    if input_binding is not None:
+        scrubbed_task["input_artifact"], scrubbed_task["input_artifact_sha256"] = input_binding
 
     workorder: dict[str, Any] = {
         "schema_version": WORKORDER_SCHEMA_VERSION,
@@ -249,14 +284,31 @@ def build_workorder(
 
 def write_workorder(workorder: dict[str, Any], output_dir: Path | str) -> Path:
     """Write workorder to <output_dir>/handoff/workorders/<workorder_id>.workorder.json."""
+    from fsf.core.asset_library import _no_links
+
     out = Path(output_dir).resolve()
-    wo_dir = out / "handoff" / "workorders"
-    wo_dir.mkdir(parents=True, exist_ok=True)
+    wo_dir = out
+    for component in ("handoff", "workorders"):
+        wo_dir /= component
+        wo_dir.mkdir(exist_ok=True)
+        _no_links(wo_dir)
 
     wo_id = workorder["workorder_id"]
     wo_file = wo_dir / f"{wo_id}.workorder.json"
     payload = json.dumps(workorder, indent=2, ensure_ascii=False)
-    wo_file.write_text(payload, encoding="utf-8")
+    try:
+        with wo_file.open("x", encoding="utf-8") as stream:
+            stream.write(payload)
+    except FileExistsError:
+        _no_links(wo_file)
+        current = json.loads(wo_file.read_text(encoding="utf-8"))
+        if current.get("workorder_digest") != canonical_contract_digest(
+                {k: v for k, v in current.items() if k != "workorder_digest"}):
+            raise HandoffIntegrityError("Existing workorder digest mismatch.") from None
+        keys = ("job_id", "run_id", "step_id", "workorder_id", "attempt_id", "tool",
+                "plan_digest", "inputs_digest", "expected_contract_digest", "requirements_digest", "target_artifact")
+        if any(current.get(key) != workorder.get(key) for key in keys):
+            raise HandoffIntegrityError("Existing workorder binding mismatch.") from None
     return wo_file
 
 
@@ -675,3 +727,332 @@ def ingest_workorder_result(
             "continuity_method": ack.get("continuity_method") or None,
         }
     return result
+
+
+def _ensure_no_internal_links(root: Path, target: Path) -> None:
+    """Reject symlinks/reparse points at or below *root* without banning OS parent links."""
+    import stat as stat_mod
+    from fsf.core.asset_library import AssetValidationError
+    from fsf.core.edit_store import _windows_attributes
+
+    rel = target.relative_to(root)
+    cur = root
+    for part in rel.parts:
+        cur = cur / part
+        if os.name == "nt":
+            if _windows_attributes(cur) & 0x400:
+                raise AssetValidationError("ASSET_PATH")
+        else:
+            info = cur.lstat()
+            if stat_mod.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & 0x400):
+                raise AssetValidationError("ASSET_PATH")
+
+
+def load_active_workorder(root: Path, journal: dict[str, Any], step_id: str) -> dict[str, Any]:
+    """Read the canonical workorder bound to this pending journal step."""
+    from fsf.core.asset_library import _path_parts
+    from fsf.core.edit_store import read_json
+
+    step = journal["steps"][step_id]
+    workorder_id = step.get("workorder_id")
+    attempt = step.get("attempt_id")
+    if (journal.get("schema_version") != "fsf_plan_execution_journal_v1"
+            or step.get("status") != "pending_handoff"
+            or type(attempt) is not int or attempt < 1
+            or not isinstance(workorder_id, str) or not re.fullmatch(r"wo_[A-Za-z0-9_-]+", workorder_id)
+            or workorder_id != workorder_identity(journal["job_id"], journal["run_id"], step_id, attempt)):
+        raise HandoffIntegrityError("Invalid active workorder identity.")
+    workorder_path = root / "handoff" / "workorders" / f"{workorder_id}.workorder.json"
+    _ensure_no_internal_links(root, workorder_path)
+    order = read_json(workorder_path)
+    if not isinstance(order, dict):
+        raise HandoffIntegrityError("Invalid active workorder record.")
+    expected = canonical_contract_digest({k: v for k, v in order.items() if k != "workorder_digest"})
+    if (
+        order.get("schema_version") != WORKORDER_SCHEMA_VERSION
+        or order.get("workorder_id") != workorder_id
+        or order.get("step_id") != step_id
+        or order.get("workorder_digest") != expected
+        or step.get("workorder_digest") != expected
+        or type(order.get("attempt_id")) is not int or order["attempt_id"] != attempt
+        or any(order.get(k) != journal.get(k) for k in ("job_id", "run_id", "plan_digest"))
+    ):
+        raise HandoffIntegrityError("Workorder is not active for the current journal/attempt.")
+    target = order.get("target_artifact")
+    if not isinstance(target, str):
+        raise HandoffIntegrityError("Invalid workorder target.")
+    _path_parts(target)
+    return order
+
+
+def _read_execution_journal(root: Path) -> dict[str, Any]:
+    from fsf.core.edit_store import read_json
+
+    path = root / "fsf_execution_journal.json"
+    _ensure_no_internal_links(root, path)
+    journal = read_json(path)
+    if (not isinstance(journal, dict) or journal.get("schema_version") != "fsf_plan_execution_journal_v1"
+            or not isinstance(journal.get("steps"), dict)
+            or not all(isinstance(journal.get(key), str) and journal[key]
+                       for key in ("job_id", "run_id", "plan_digest"))):
+        raise HandoffIntegrityError("Invalid execution journal.")
+    return journal
+
+
+def _load_active_workorder_and_journal(root: Path, workorder_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    journal = _read_execution_journal(root)
+    steps = [step_id for step_id, step in journal["steps"].items()
+             if isinstance(step, dict) and step.get("workorder_id") == workorder_id
+             and step.get("status") == "pending_handoff"]
+    if len(steps) != 1:
+        raise HandoffIntegrityError("Workorder is not active for the current journal/attempt.")
+    order = load_active_workorder(root, journal, steps[0])
+    return order, journal
+
+
+def _active_workorders(root, journal):
+    for step_id, step in journal.get("steps", {}).items():
+        if not isinstance(step, dict) or step.get("status") != "pending_handoff":
+            continue
+        try:
+            yield load_active_workorder(root, journal, step_id)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            continue
+
+
+def list_active_workorders(output_dir: Path | str) -> list[dict[str, Any]]:
+    root = Path(output_dir).resolve()
+    try:
+        return list(_active_workorders(root, _read_execution_journal(root)))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []
+
+
+def summarize_workorders(output_dir: Path | str, *, active_only: bool = False) -> list[dict[str, Any]]:
+    """Classify workorders under <output_dir>/handoff/workorders as active vs historical."""
+    out = Path(output_dir).resolve()
+    wo_dir = out / "handoff" / "workorders"
+    if not wo_dir.is_dir():
+        return []
+    try:
+        journal = _read_execution_journal(out)
+        active = list(_active_workorders(out, journal))
+    except (OSError, ValueError, TypeError, AttributeError):
+        journal, active = {}, []
+    steps = journal.get("steps") if isinstance(journal.get("steps"), dict) else {}
+
+    rows: list[dict[str, Any]] = []
+    active_ids = {wo["workorder_id"] for wo in active}
+    historical = [] if active_only else [
+        wo for wo in list_pending_workorders(out) if wo.get("workorder_id") not in active_ids
+    ]
+    for wo in active + historical:
+        step_id = wo.get("step_id")
+        step = steps.get(step_id) if isinstance(steps, dict) else None
+        same_binding = (
+            isinstance(step, dict)
+            and step.get("workorder_id") == wo.get("workorder_id")
+            and step.get("attempt_id") == wo.get("attempt_id")
+            and wo.get("job_id") == journal.get("job_id")
+            and wo.get("plan_digest") == journal.get("plan_digest")
+        )
+        if wo.get("workorder_id") in active_ids:
+            state = "active_pending"
+        elif same_binding and step.get("status") == "completed":
+            state = "completed"
+        elif same_binding and step.get("status") == "failed":
+            state = "failed"
+        else:
+            state = "superseded"
+
+        existing_res = find_result_file(
+            out,
+            job_id=str(wo.get("job_id") or ""),
+            run_id=str(wo.get("run_id") or ""),
+            step_id=str(step_id or ""),
+            attempt_id=int(wo.get("attempt_id") or -1),
+        )
+        contract = wo.get("expected_media_contract")
+        media_summary = None
+        if isinstance(contract, dict):
+            media_summary = {
+                key: contract[key]
+                for key in ("width", "height", "fps", "duration_seconds", "video_codecs", "containers", "audio")
+                if key in contract
+            }
+        rows.append(
+            {
+                "workorder_id": wo.get("workorder_id"),
+                "step_id": step_id,
+                "attempt_id": wo.get("attempt_id"),
+                "tool": wo.get("tool"),
+                "target_artifact": wo.get("target_artifact"),
+                "state": state,
+                "result_present": existing_res is not None,
+                "continuity_required": bool((wo.get("consistency_requirements") or {}).get("resolved_sha256")),
+                "media_summary": media_summary,
+            }
+        )
+    return rows
+
+
+def _publish_workorder_result(staged: Path, target: Path) -> None:
+    """Make a complete receipt visible without replacing an existing file."""
+    if os.name == "nt":
+        # Windows rename fails if the destination exists.
+        staged.rename(target)
+    else:
+        # POSIX rename would replace the destination.
+        os.link(staged, target)
+
+
+def fulfill_workorder(
+    output_dir: Path | str,
+    workorder_id: str,
+    *,
+    artifact: str | Path | None = None,
+    status: str = "completed",
+    continuity_method: str | None = None,
+    ref_assets: list[tuple[str, str]] | None = None,
+    capability_gap: str | None = None,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    """Validate an agent outcome/failure and emit a sealed fsf_workorder_result_v1."""
+    from fsf.conformance.media import evaluate_media_file
+    from fsf.core.asset_library import _path_parts
+    from fsf.runtime.job_media import local_media_tools
+
+    root = Path(output_dir).resolve(strict=True)
+    order, _ = _load_active_workorder_and_journal(root, workorder_id)
+
+    res_dir = root / "handoff"
+    res_dir.mkdir(exist_ok=True)
+    _ensure_no_internal_links(root, res_dir)
+    res_dir = res_dir / "results"
+    res_dir.mkdir(exist_ok=True)
+    _ensure_no_internal_links(root, res_dir)
+
+    existing = find_result_file(
+        root,
+        job_id=order["job_id"],
+        run_id=order["run_id"],
+        step_id=order["step_id"],
+        attempt_id=order["attempt_id"],
+    )
+    canonical_res = res_dir / f"{workorder_id}.result.json"
+    alt_res = res_dir / f"{workorder_id}.json"
+    if existing is not None or canonical_res.exists() or alt_res.exists():
+        raise HandoffIntegrityError(f"Result already submitted for workorder '{workorder_id}'.")
+
+    norm_status = str(status or "").strip().lower()
+    if norm_status not in {"completed", "failed"}:
+        raise HandoffIntegrityError(f"Invalid --status {status!r}; expected 'completed' or 'failed'.")
+
+    payload: dict[str, Any] = {
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "job_id": order["job_id"],
+        "run_id": order["run_id"],
+        "workorder_id": order["workorder_id"],
+        "step_id": order["step_id"],
+        "attempt_id": order["attempt_id"],
+        "plan_digest": order["plan_digest"],
+        "inputs_digest": order["inputs_digest"],
+        "status": norm_status,
+    }
+    if order.get("expected_contract_digest"):
+        payload["expected_contract_digest"] = order["expected_contract_digest"]
+
+    req_digest = order.get("requirements_digest")
+    gap_text = str(capability_gap or "").strip()
+    detail_text = str(detail or "").strip()
+    if req_digest:
+        ack: dict[str, Any] = {"acknowledged_digest": req_digest}
+        if ref_assets is not None:
+            ack["ref_assets_used"] = [{"key": k, "sha256": v} for k, v in ref_assets]
+        if continuity_method is not None:
+            ack["continuity_method"] = str(continuity_method).strip()
+        if norm_status == "completed":
+            if gap_text:
+                raise HandoffIntegrityError("Completed result cannot declare capability_gap; use --status failed.")
+        else:
+            if not gap_text and not detail_text:
+                raise HandoffIntegrityError("Failed result requires --capability-gap or --detail.")
+            if gap_text:
+                ack["capability_gap"] = gap_text
+        payload["consistency_acknowledgement"] = ack
+    elif continuity_method is not None or ref_assets is not None:
+        raise HandoffIntegrityError("Workorder has no consistency_requirements for continuity/ref-asset flags.")
+
+    if norm_status == "completed":
+        if artifact is None or not str(artifact).strip():
+            raise HandoffIntegrityError("--artifact is required when --status completed.")
+        art_raw = str(artifact).strip()
+        cand = Path(art_raw)
+        expected_raw = root.joinpath(*_path_parts(order["target_artifact"]))
+        _ensure_no_internal_links(root, expected_raw)
+        expected_target = safe_resolve_artifact_path(order["target_artifact"], root)
+        if cand.is_absolute():
+            _ensure_no_internal_links(root, expected_raw)
+            resolved = cand.resolve()
+        elif (root / cand).exists() or (root / cand).is_symlink():
+            rel_raw = root.joinpath(*_path_parts(cand.as_posix()))
+            _ensure_no_internal_links(root, rel_raw)
+            resolved = rel_raw.resolve()
+        else:
+            resolved = cand.resolve()
+        if resolved != expected_target:
+            raise HandoffIntegrityError(
+                f"Artifact '{art_raw}' does not match workorder target_artifact '{order['target_artifact']}'."
+            )
+        if not resolved.is_file() or resolved.stat().st_size == 0:
+            raise HandoffIntegrityError(f"Target artifact '{order['target_artifact']}' is missing or empty.")
+
+        expected_contract = order.get("expected_media_contract")
+        if isinstance(expected_contract, dict) and expected_contract:
+            with local_media_tools():
+                report, _ = evaluate_media_file(resolved, expected_contract)
+            if report.get("evaluation_status") != "conforms":
+                issue_codes = [str(item.get("code") or "CONFORMANCE_ISSUE") for item in report.get("issues", [])]
+                raise HandoffIntegrityError(
+                    f"Artifact failed workorder media contract ({report.get('evaluation_status')}): "
+                    f"{', '.join(issue_codes) or 'MEDIA_CONFORMANCE_FAILED'}"
+                )
+        actual_sha = hashlib.sha256(resolved.read_bytes()).hexdigest().lower()
+        payload["artifact_path"] = order["target_artifact"]
+        payload["artifact_sha256"] = actual_sha
+        if detail_text:
+            payload["detail"] = detail_text
+    else:
+        if artifact is not None:
+            raise HandoffIntegrityError("--artifact cannot be supplied with --status failed.")
+        payload["error"] = gap_text or detail_text or "Agent reported failure"
+        if detail_text:
+            payload["detail"] = detail_text
+
+    # Use a unique non-JSON name so the executor ignores interrupted writers.
+    data = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    fd, name = tempfile.mkstemp(prefix=".fulfill-", suffix=".tmp", dir=res_dir)
+    staged = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        ingest_workorder_result(staged, order, root)
+        try:
+            _publish_workorder_result(staged, canonical_res)
+        except FileExistsError:
+            raise HandoffIntegrityError(f"Result already submitted for workorder '{workorder_id}'.") from None
+    finally:
+        staged.unlink(missing_ok=True)
+
+    return {
+        "schema_version": "fsf_workorder_fulfill_receipt_v1",
+        "workorder_id": workorder_id,
+        "step_id": order["step_id"],
+        "attempt_id": order["attempt_id"],
+        "status": norm_status,
+        "result_path": canonical_res.relative_to(root).as_posix(),
+        "artifact_path": payload.get("artifact_path"),
+        "artifact_sha256": payload.get("artifact_sha256"),
+    }

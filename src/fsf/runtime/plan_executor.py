@@ -38,6 +38,7 @@ from fsf.runtime.handoff import (
     build_workorder,
     find_result_file,
     ingest_workorder_result,
+    resolve_workorder_input,
     write_workorder,
 )
 
@@ -190,6 +191,7 @@ class PlanExecutor:
         step_res: dict[str, Any],
         step_def: dict[str, Any],
         label: str,
+        selected: list[Path] | None = None,
     ) -> str | None:
         """Return verified on-disk SHA of the primary video/shape artifact of *step_id*.
 
@@ -228,9 +230,12 @@ class PlanExecutor:
                 if not Path(fpath).is_absolute()
                 else Path(fpath)
             )
-            return self._verify_source_file_sha(
+            verified = self._verify_source_file_sha(
                 art_path, journal_sha, label=f"{label}::journal/{fpath}"
             )
+            if selected is not None:
+                selected.append(art_path)
+            return verified
         # No qualifying journal entry — source not ready or step produced no video
         return None
 
@@ -238,6 +243,7 @@ class PlanExecutor:
         self,
         continues_from: dict[str, Any],
         step_results: dict[str, dict[str, Any]],
+        selected: list[Path] | None = None,
     ) -> dict[str, str]:
         """Resolve {source_shot_id -> sha256} for a continues_from declaration.
 
@@ -355,6 +361,8 @@ class PlanExecutor:
                         f_full, journal_sha,
                         label=f"specific_artifact={artifact_ref}"
                     )
+                    if selected is not None:
+                        selected.append(f_full)
                     return {src_shot_id: verified}
 
             # No matching journal entry — reject.
@@ -374,7 +382,7 @@ class PlanExecutor:
                 step_def = self._steps_by_id[step_id]
                 sha = self._find_video_sha_in_step_result(
                     step_id, step_res, step_def,
-                    label=f"latest_completed/{src_shot_id}/{step_id}"
+                    label=f"latest_completed/{src_shot_id}/{step_id}", selected=selected
                 )
                 if sha is not None:
                     return {src_shot_id: sha}
@@ -680,6 +688,7 @@ class PlanExecutor:
                     "id": step_id,
                     "kind": step.get("kind"),
                     "status": "blocked",
+                    "blocker": "DEPENDENCY_PENDING",
                     "error": blocked_by,
                 }
                 continue
@@ -697,6 +706,7 @@ class PlanExecutor:
             # resolved_sha256, and ref-image SHAs) participates in
             # inputs_digest and therefore in the authoritative resume binding.
             resolved_execution_context: dict[str, Any] | None = None
+            continuity_paths: list[Path] = []
             resolution_error: str | None = None
             raw_ctx = step.get("inputs", {}).get("consistency_context")
             if raw_ctx is not None and isinstance(raw_ctx, dict) and raw_ctx:
@@ -709,7 +719,7 @@ class PlanExecutor:
                     cf_decl = raw_ctx.get("continues_from")
                     resolved_shas: dict[str, str] = {}
                     if cf_decl is not None:
-                        resolved_shas = self._resolve_continues_from_sha(cf_decl, step_results)
+                        resolved_shas = self._resolve_continues_from_sha(cf_decl, step_results, continuity_paths)
 
                     # Build ref_image_files keyed by sha256 (not role) covering
                     # both shot-level ref_images and asset_refs[i].ref_images.
@@ -785,6 +795,7 @@ class PlanExecutor:
                         "id": step_id,
                         "kind": "transform",
                         "status": "blocked",
+                        "blocker": "REVIEW_REQUIRED",
                         "error": (
                             f"Assembly gate blocked (resume path): consistency review "
                             f"incomplete for one or more shots.  "
@@ -856,6 +867,11 @@ class PlanExecutor:
                             }
                             if prior_step.get("remote_provenance"):
                                 step_results[step_id]["remote_provenance"] = copy.deepcopy(prior_step["remote_provenance"])
+                            for key in ("workorder_id", "attempt_id"):
+                                if key in prior_step:
+                                    step_results[step_id][key] = prior_step[key]
+                            if prior_step.get("execution_kind") == "handoff":
+                                step_results[step_id]["workorder_run_id"] = prior_step.get("workorder_run_id", persisted_run)
                             # Re-carry verified consistency acknowledgement from
                             # prior journal so review tooling can access it on resume.
                             if prior_step.get("consistency_acknowledgement"):
@@ -884,6 +900,7 @@ class PlanExecutor:
                     prior_journal=prior_journal,
                     step_results=step_results,
                     resolved_execution_context=resolved_execution_context,
+                    continuity_path=continuity_paths[0] if continuity_paths else None,
                 )
                 res["inputs_digest"] = curr_inputs_digest
                 if self._post_context is not None and res.get("error"):
@@ -1033,6 +1050,8 @@ class PlanExecutor:
                     journal_steps[sid]["remote_provenance"] = copy.deepcopy(sdata["remote_provenance"])
                 if sdata.get("workorder_id"):
                     journal_steps[sid]["workorder_id"] = sdata["workorder_id"]
+                if "workorder_run_id" in sdata:
+                    journal_steps[sid]["workorder_run_id"] = sdata["workorder_run_id"]
                 # Persist verified consistency acknowledgement for downstream review.
                 # Stored as-reported; visual compliance is NOT implied.
                 if sdata.get("consistency_acknowledgement"):
@@ -1055,6 +1074,11 @@ class PlanExecutor:
                     journal_steps[sid]["remote_provenance"] = copy.deepcopy(sdata["remote_provenance"])
                 if sdata.get("workorder_id"):
                     journal_steps[sid]["workorder_id"] = sdata["workorder_id"]
+            elif sdata.get("status") == "blocked":
+                journal_steps[sid] = {
+                    "status": "blocked",
+                    "blocker": sdata.get("blocker", "STEP_BLOCKED"),
+                }
             elif sdata.get("status") in {"pending_handoff", "pending_external"}:
                 journal_steps[sid] = {
                     "status": sdata["status"],
@@ -1066,6 +1090,8 @@ class PlanExecutor:
                     journal_steps[sid]["attempt_id"] = sdata["attempt_id"]
                 if sdata.get("workorder_id"):
                     journal_steps[sid]["workorder_id"] = sdata["workorder_id"]
+                if sdata.get("workorder_digest"):
+                    journal_steps[sid]["workorder_digest"] = sdata["workorder_digest"]
 
         journal_payload = {
             "schema_version": "fsf_plan_execution_journal_v1",
@@ -1074,6 +1100,7 @@ class PlanExecutor:
             "plan_request_id": plan.get("request_id"),
             "plan_digest": plan_digest,
             "source_sha256": source_sha,
+            "execution_status": "blocked" if overall_status == "failed" and not failed_count else overall_status,
             "steps": journal_steps,
         }
         from fsf.remote.contracts import write_json
@@ -1103,6 +1130,7 @@ class PlanExecutor:
         prior_journal: dict[str, Any] | None = None,
         step_results: dict[str, dict[str, Any]] | None = None,
         resolved_execution_context: dict[str, Any] | None = None,
+        continuity_path: Path | None = None,
     ) -> dict[str, Any]:
         """Dispatch a single step by kind."""
         kind = step.get("kind")
@@ -1116,6 +1144,7 @@ class PlanExecutor:
                 prior_journal=prior_journal,
                 step_results=step_results or {},
                 resolved_execution_context=resolved_execution_context,
+                continuity_path=continuity_path,
             )
         if kind == "transform":
             return self._execute_transform_step(step, step_results=step_results or {})
@@ -1129,6 +1158,7 @@ class PlanExecutor:
         prior_journal: dict[str, Any] | None = None,
         step_results: dict[str, dict[str, Any]] | None = None,
         resolved_execution_context: dict[str, Any] | None = None,
+        continuity_path: Path | None = None,
     ) -> dict[str, Any]:
         """Execute a tool step, Handoff generation step, or Media Conformance QC step.
 
@@ -1235,6 +1265,17 @@ class PlanExecutor:
                 if input_artifact_path:
                     break
 
+            input_artifact_path = continuity_path or input_artifact_path
+            input_binding = None
+            if input_artifact_path is not None:
+                from fsf.core.asset_library import _no_links
+                from fsf.runtime.blender import sha
+                try:
+                    relative = input_artifact_path.absolute().relative_to(self.output_dir.absolute()).as_posix()
+                    _no_links(input_artifact_path.absolute())
+                except (OSError, ValueError):
+                    raise HandoffSecurityError("Workorder input must be inside the workspace.") from None
+                input_binding = relative, sha(input_artifact_path)
             task = {
                 "id": inputs.get("shot_id", step_id),
                 # C1 (P4): use assembled effective_prompt as the authoritative generation
@@ -1262,15 +1303,28 @@ class PlanExecutor:
                 "shot_spec": inputs.get("shot_spec", {}),
                 "asset_spec": inputs.get("asset_spec", {}),
                 "target_artifact": artifact_filename,
-                "input_artifact": str(input_artifact_path) if input_artifact_path else None,
+                "input_artifact": None,
                 # C1: resolved execution context (effective_prompt assembled, SHA filled)
                 "execution_context": execution_context,
             }
 
             expected_contract = inputs.get("expected_media_contract")
-            expected_digest = inputs.get("expected_media_contract_digest") or (
-                canonical_contract_digest(expected_contract) if expected_contract else None
-            )
+            expected_digest = inputs.get("expected_media_contract_digest")
+            if expected_contract is None and declared_outputs:
+                qc_candidates = [
+                    q["inputs"]
+                    for q in self._steps_by_id.values()
+                    if q.get("tool") == "pdx.media.technical_conform"
+                    and step_id in q.get("depends_on", [])
+                    and q.get("inputs", {}).get("target_artifact") in declared_outputs
+                    and isinstance(q.get("inputs", {}).get("expected_media_contract"), dict)
+                ]
+                if len(qc_candidates) == 1:
+                    qc_inputs = qc_candidates[0]
+                    expected_contract = copy.deepcopy(qc_inputs["expected_media_contract"])
+                    expected_digest = qc_inputs.get("expected_media_contract_digest")
+            if expected_contract and not expected_digest:
+                expected_digest = canonical_contract_digest(expected_contract)
 
             # Determine attempt_id:
             # Check existing workorders on disk for this job/run/step
@@ -1311,12 +1365,15 @@ class PlanExecutor:
                 inputs_digest=inputs_digest,
                 target_artifact=artifact_filename,
                 task_payload=task,
+                input_binding=input_binding,
                 expected_media_contract=expected_contract,
                 expected_contract_digest=expected_digest,
                 consistency_requirements=build_consistency_requirements(execution_context)
                 if execution_context
                 else None,
             )
+            if input_binding is not None:
+                resolve_workorder_input(wo, self.output_dir)
 
             res_file = find_result_file(
                 self.output_dir,
@@ -1368,6 +1425,7 @@ class PlanExecutor:
                         "workorder_id": wo["workorder_id"],
                         "handoff_result": ingest_res,
                         "execution_kind": "handoff",
+                        "workorder_run_id": wo["run_id"],
                         "output_artifacts": [str(art_path)],
                     }
                     # Preserve verified consistency acknowledgement for journal
@@ -1403,6 +1461,7 @@ class PlanExecutor:
                 "attempt_id": current_attempt,
                 "workorder_id": wo["workorder_id"],
                 "workorder_path": str(wo_path),
+                "workorder_digest": json.loads(wo_path.read_text(encoding="utf-8"))["workorder_digest"],
                 "output_artifacts": [],
             }
 
@@ -1788,8 +1847,12 @@ class PlanExecutor:
                 "review_required": sdata.get("review_required", False),
                 "requirements_digest": sdata.get("requirements_digest"),
                 "workorder_id": sdata.get("workorder_id"),
+                "attempt_id": sdata.get("attempt_id"),
+                "execution_kind": sdata.get("execution_kind"),
                 "consistency_acknowledgement": sdata.get("consistency_acknowledgement"),
             }
+            if "workorder_run_id" in sdata:
+                steps_snapshot[sid]["workorder_run_id"] = sdata["workorder_run_id"]
         return {
             "schema_version": "fsf_plan_execution_journal_v1",
             "job_id": self.current_job_id,
@@ -1859,6 +1922,7 @@ class PlanExecutor:
                 "id": step_id,
                 "kind": "transform",
                 "status": "blocked",
+                "blocker": "REVIEW_REQUIRED",
                 "error": (
                     f"Assembly gate blocked: consistency review incomplete for one or more shots.  "
                     f"Approve all shots via 'fsf review approve' before assembling.  "

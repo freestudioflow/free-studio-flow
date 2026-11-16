@@ -41,6 +41,17 @@ from fsf.conformance.digest import canonical_contract_digest
 REVIEW_SCHEMA_VERSION = "fsf_consistency_review_v1"
 REVIEW_STORE_FILENAME = "fsf_consistency_reviews.json"
 
+
+def review_workorder_valid(step, *, step_id, job_id, run_id):
+    if step.get("execution_kind") != "handoff":
+        return True
+    from fsf.runtime.handoff import workorder_identity
+    attempt = step.get("attempt_id")
+    original_run = step.get("workorder_run_id", run_id)
+    return (bool(job_id and step_id) and isinstance(original_run, str) and bool(original_run)
+            and type(attempt) is int and attempt > 0
+            and step.get("workorder_id") == workorder_identity(job_id, original_run, step_id, attempt))
+
 # Valid verdict strings.  Only "approved" passes the gate.
 VALID_VERDICTS: frozenset[str] = frozenset({"approved", "rejected", "needs_rework"})
 
@@ -115,6 +126,7 @@ def is_review_valid(
     expected_step_id: str | None = None,
     expected_job_id: str | None = None,
     expected_run_id: str | None = None,  # accepted but not enforced; see NOTE below
+    current_step: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     """Check whether a review record is still valid and approved.
 
@@ -134,6 +146,9 @@ def is_review_valid(
 
     Reused steps must also pass with their carried artifact SHA and digest.
     """
+    if current_step is not None and not review_workorder_valid(
+            current_step, step_id=expected_step_id, job_id=expected_job_id, run_id=expected_run_id):
+        return False, "Handoff workorder or attempt identity is missing or invalid."
     if not isinstance(review, dict) or review.get("schema_version") != REVIEW_SCHEMA_VERSION:
         return False, "Review record has wrong schema_version or is not a dict"
 
@@ -410,6 +425,7 @@ def list_shots_pending_review(
                 expected_step_id=step_id,
                 expected_job_id=job_id,
                 expected_run_id=run_id,
+                current_step=step_data,
             )
             if not valid:
                 pending.append({
@@ -552,6 +568,7 @@ def list_shots_pending_review(
             expected_step_id=step_id,
             expected_job_id=job_id,
             expected_run_id=run_id,
+            current_step=step_data,
         )
         if not valid:
             pending.append({

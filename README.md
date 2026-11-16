@@ -1,15 +1,94 @@
 # free-studio-flow
 
-See [Provider setup](docs/FSF_LIVE_VERIFY.md#provider-setup-and-recoverable-generation) for API configuration, host secret
-bindings, and bounded per-shot QC recovery. Credential checks and successful
-model inference are verified separately.
+Free Studio Flow (FSF) turns a Word shot list into a production plan, tracks
+generation and review, and assembles and verifies the finished video.
 
-AI-native film factory and Studio flows on [ProDocuX](https://github.com/prodocux/prodocux) contracts.
+## Try a video locally
 
-License: Apache-2.0. See [LICENSE](LICENSE).
+Use Python 3.11+ and put `ffmpeg` and `ffprobe` on your PATH. Run these commands
+in a folder containing the RC14 candidate wheel. From a source checkout, you
+can use `pip install .` in place of the wheel installation. The local synthetic
+demo needs no account, API key, or GPU.
+
+**Windows (PowerShell)**
+
+```powershell
+python -m venv .venv
+.venv/Scripts/python -m pip install ./free_studio_flow-0.1.0rc14-py3-none-any.whl
+.venv/Scripts/python -m fsf.cli demo --out demo-output
+```
+
+**Linux / macOS (shell)**
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install ./free_studio_flow-0.1.0rc14-py3-none-any.whl
+.venv/bin/python -m fsf.cli demo --out demo-output
+```
+
+Open `demo-output/assembled_timeline.mp4` in your video player. An agent should
+give the user the full path so they can play it. Expect a four-second, silent
+clip with moving test patterns.
+
+Verify the clip against the job's recorded contract. A successful result reports
+`evaluation_status: "conforms"`.
+
+**Windows**
+
+```powershell
+.venv/Scripts/python -m fsf.cli status demo-output --json
+.venv/Scripts/python -m fsf.cli verify --job demo-output
+```
+
+**Linux / macOS**
+
+```bash
+.venv/bin/python -m fsf.cli status demo-output --json
+.venv/bin/python -m fsf.cli verify --job demo-output
+```
+
+Let the demo create its output directory. If `demo-output` already contains
+other files, choose a new name and use that same name when verifying. If FSF
+reports `FFMPEG_REQUIRED`, check that both executables run in the same shell.
+The demo does not download them.
+
+## Start your own job
+
+1. Create or copy a shot sheet (`sample.docx` or `sheet new`), keeping the `-----`
+   separator between shots. Ask the user to confirm the shot list and what will
+   produce the clips.
+2. Create the plan and emit the first generation workorders. On Linux/macOS
+   replace `.venv/Scripts/python` with `.venv/bin/python`.
+
+   ```powershell
+   .venv/Scripts/python -m fsf.cli sheet new --out my-shot-list.docx --handoff
+   .venv/Scripts/python -m fsf.cli plan my-shot-list.docx --pipeline generate --media --assembly --out my-plan.json
+   .venv/Scripts/python -m fsf.cli execute my-plan.json --out my-job --handoff
+   ```
+
+3. When execute pauses, run `.venv/Scripts/python -m fsf.cli status my-job --json`.
+   Read `state`, `blockers`, and `next_action`. For `waiting_handoff`, inspect
+   `workorders` (or run `workorder list my-job`), verify any continuity input
+   with `workorder input my-job <workorder_id>`, produce the target MP4, and
+   submit the sealed receipt with `workorder fulfill my-job <workorder_id> --artifact <file>`.
+   For `waiting_review`, present the shot for [operator review](#consistency-review-gate-rc5).
+   Re-run the original execute command after submitting results or recording approval.
+4. After assembly, verify with
+   `.venv/Scripts/python -m fsf.cli verify --job my-job --plan my-plan.json`.
+
+See [Getting Started, Architecture, and Handoff Guide](docs/GETTING_STARTED.md) for the
+dataflow diagram, glossary, full DOCX reference, `demo --handoff`, and capability matrix.
+Continue with [production workflows](docs/PRODUCTION_WORKFLOWS.md) for indexed
+jobs, recovery and longer films, or [provider setup](docs/FSF_LIVE_VERIFY.md#provider-setup-and-recoverable-generation)
+when you are ready to configure a backend.
+
+## Installation and releases
+
+RC14 is a candidate. The PyPI install below selects the latest verified
+release. For RC14 changes and accepted limits, see [release notes](docs/RELEASE.md#release-notes-010rc14).
 
 <!-- pypi-release-status:start -->
-Source version in this branch: **`0.1.0rc13`**.
+Source version in this branch: **`0.1.0rc14`**.
 
 Latest verified PyPI release: **[`0.1.0rc13`](https://pypi.org/project/free-studio-flow/0.1.0rc13/)**,
 published from tag **[`v0.1.0rc13`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc13)**
@@ -19,105 +98,6 @@ at commit `6ae9419c1888ac4c5dac8a325582f397a8b808df`.
 python -m pip install "free-studio-flow==0.1.0rc13"
 ```
 <!-- pypi-release-status:end -->
-
-### Additions and accepted limits in rc13
-
-Version 0.1.0rc13 is published on PyPI and GitHub Releases. It adds one-submission
-feature planning, a persistent workorder and attempt index, bounded quality
-checks, and recoverable assembly. The 120-minute exercise verified a synthetic
-64×64 video-only delivery and zero duplicate dispatches or charges on reuse.
-See the [RC13 release notes](docs/RELEASE.md#release-notes-010rc13)
-for the accepted scope and pending qualifications.
-
-### Additions and accepted limits in rc12
-
-Version 0.1.0rc12 is published on PyPI and GitHub Releases. See the
-[RC12 release notes](docs/RELEASE.md#release-notes-010rc12) for the verified
-scope and pending qualification.
-
-### Additions and accepted limits in rc11
-
-Version 0.1.0rc11 is published on PyPI and GitHub Releases.
-
-- Worker credential isolation, redacted diagnostics, destination policies and
-  operator-configured verifiers.
-- Portable multichannel controls, reference anchors, global timelines,
-  segment quality gates and recoverable publication.
-- Local synthetic media passed production QC, edit and delivery. One pinned
-  MobileNet V2 version was attached in a private offline Kaggle CPU run.
-- Neural control adherence and model A/B, Gemma/SA-3 weights, automatic Secret
-  attachment, missing historical evidence, calibrated semantic QC and human
-  motion/listening review remain pending.
-- A 10,000-task chain passed an independent write-volume rerun; another run
-  exceeded 256 KiB. The bound across runs remains unqualified.
-- L40S/B300, three-minute neural long takes, high-quality two-hour films and
-  physical XR qualification remain pending independent work.
-- Native archive limits, filesystem durability profiles and cross-execution
-  byte reuse retain their qualification boundaries.
-- An earlier Docker sampler failure passed isolated and full reruns. Its
-  underlying cause remains unresolved.
-
-The published rc11 package includes the earlier releases and the production
-and extension features described below.
-
-### Additions in rc10
-
-- Opt-in indexed production stores with atomic task and budget admission,
-  durable batch progress, reconciliation, cancellation and quiescent migration.
-  Existing JSON workflows remain supported.
-- Streaming chunk transfer on mounted storage, verified partial recovery and
-  immutable asset-pack import with version-conflict checks. These do not add
-  HTTP byte-offset resume to provider-native archives.
-- Command-based ASR integration, an optional Whisper worker and rendered ducking
-  tied to dialogue coverage. Numeric audio checks remain separate from listening
-  review.
-- Static glTF delivery checks, a pinned Godot import/probe profile and spatial
-  sidecars shared by film, gaming and XR consumers. Engine import does not certify
-  appearance, frame rate, tracking, comfort or a headset application.
-- Windows child-process ownership established during creation, with bounded
-  descendant cleanup and sanitized diagnostics.
-
-See [Indexed production workflows](docs/PRODUCTION_WORKFLOWS.md) for commands
-and qualification boundaries. These additions are included in the rc10
-distributions. Long-film quality, evaluator calibration and untested hardware
-remain separate qualifications.
-
-Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/pdx-experimental/b-roll-library-generator).
-
-### Remote workers and model APIs
-
-This checkout includes opt-in `fsf remote` parent/worker dispatch and `fsf api`
-profiles for text, image, video, audio and upscale outputs. Copy the disabled
-templates with `fsf remote templates --out config` into an existing empty
-directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
-for setup, recovery, provider protocol limits and recipe customization.
-These workflows and the production extensions below are included in the rc10
-distributions. Use matching parent and worker builds.
-Remote outputs retain parent-side QC and review requirements; successful transport
-does not establish real model inference or visual consistency.
-
-Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter-media==0.2.0a3`.
-
-### GPU workers and control sources (rc8)
-
-Pinned tool preparation, provider-native artifact transfer, explicit v2 CUDA requests
-and global Blender segments are described in
-[Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions were introduced
-in rc8. Use matching parent and worker builds for current jobs. GPU execution requires
-operator resource approval and verified host
-capability. Technical control-video checks leave motion review `not_reviewed`.
-
-Approved worker recipes can fill free GPU slots as tasks finish, bind selected
-CUDA devices, and explicitly share cards within declared slot and memory
-budgets. Pause drains running tasks; continuation rechecks accepted outputs.
-Native archives remain bounded to 64 MiB, and Kaggle also enforces the configured
-encoded-notebook limit. Native downloads retry whole archives rather than
-resuming byte offsets.
-
-An optional pinned Anatomy checkout and Node runtime can supply spring-state
-control samples with matching pose and readout. These are mechanism control
-visualizations, not a general physics engine or proof of downstream model
-motion adherence. Tools, models and provider capabilities remain recipe-specific.
 
 ## What this checkout contains
 
@@ -195,6 +175,11 @@ an explicit host credential binding. Do not put secrets in JSON, git, or
 Windows paths below; Unix: `.venv/bin/python`.
 
 ```text
+.venv/Scripts/python -m fsf.cli demo --out demo-output
+.venv/Scripts/python -m fsf.cli demo --handoff --out demo-handoff
+.venv/Scripts/python -m fsf.cli sheet new --out my-shot-list.docx --handoff
+.venv/Scripts/python -m fsf.cli status demo-output --json
+.venv/Scripts/python -m fsf.cli verify --job demo-output
 .venv/Scripts/python -m fsf.cli check
 .venv/Scripts/python -m fsf.cli flows
 .venv/Scripts/python -m fsf.cli intake path/to/sheet.docx --out output/job
@@ -202,11 +187,22 @@ Windows paths below; Unix: `.venv/bin/python`.
 .venv/Scripts/python -m fsf.cli plan path/to/sheet.docx --pipeline custom --skills storyboard,generate,dub
 .venv/Scripts/python -m fsf.cli plan path/to/sheet.docx --pipeline p1 --media --assembly --bgm path/to/bgm.wav --out output/plan.json
 .venv/Scripts/python -m fsf.cli execute output/plan.json --out output/execute
+.venv/Scripts/python -m fsf.cli workorder list output/execute
+.venv/Scripts/python -m fsf.cli workorder fulfill output/execute <workorder_id> --artifact S01.mp4
 .venv/Scripts/python -m fsf.cli flow run studio.video.generate path/to/sheet.docx --transport kaggle --shape
 .venv/Scripts/python -m fsf.cli run path/to/sheet.docx --executor mock.studio.video
-.venv/Scripts/python -m fsf.cli verify path/to/clip.mp4
+.venv/Scripts/python -m fsf.cli verify path/to/clip.mp4 --expected path/to/contract.json
 .venv/Scripts/python -m fsf.cli live-check
 ```
+
+For a job with more than one candidate output, use `verify --job <output-dir>
+--artifact relative/path.mp4` with forward slashes. For a standalone clip,
+use `verify <clip> --expected <contract.json>`.
+
+`status <output-dir> [--json]` reads the last recorded local state. It never
+executes the suggested action. Exit 0 means the status was read successfully.
+An unreadable or invalid record returns 1. Use the original execute command
+when the report calls for resuming, including its original plan and options.
 
 - `plan`: Compiles the execution plan (`pdx_execution_plan_v1`). Supports `--media` (real media routing) or `--shape` (contract stubs), plus `--assembly`, `--subtitles`, and `--bgm`.
 - `execute`: Orchestrates the compiled plan DAG end-to-end, executing steps, assembly transforms, and QC conformance gates with authoritative resume support.
@@ -224,18 +220,19 @@ Windows paths below; Unix: `.venv/bin/python`.
 Enable Handoff via any of:
 
 ```text
-# Delegate all media-generation steps
-fsf execute plan.json --out output/execute --handoff
+# Delegate all media-generation steps (Unix: .venv/bin/python)
+.venv/Scripts/python -m fsf.cli execute plan.json --out output/execute --handoff
 
 # Delegate via executor override
-fsf execute plan.json --out output/execute --executor handoff
+.venv/Scripts/python -m fsf.cli execute plan.json --out output/execute --executor handoff
 
 # Per-step: set executor_id in the plan step inputs
 inputs.executor_id = "handoff"
 ```
 
-On the first run FSF emits workorders and exits with `status: "pending_handoff"`.
-After the external agent writes result files into `<out_dir>/handoff/results/`,
+On the first run FSF emits workorders and exits with `status: "pending_handoff"` (exit 10).
+Use `workorder list` / `workorder input` to inspect active workorders, and `workorder fulfill`
+to validate outputs and write `<workorder_id>.result.json` into `<out_dir>/handoff/results/`, then
 re-run the **identical** command; FSF ingests the results and continues with QC
 and assembly steps (those are always executed by FSF, never delegated).
 
@@ -899,6 +896,61 @@ Successful validation proves the declared integrity checks at the time of
 reading. It does not decode media, establish complete model dependencies,
 certify rendering/Gaming/VR suitability, or protect against every concurrent
 filesystem replacement. Consumers must re-check files when using them.
+
+## Release and advanced workflow details
+
+<details>
+<summary>Release highlights and worker setup</summary>
+
+Full per-version changelogs, artifact digests, accepted scopes, and pending
+qualifications live in [docs/RELEASE.md](docs/RELEASE.md) (`0.1.0rc13`, `0.1.0rc12`,
+`0.1.0rc11`, `0.1.0rc10`, and earlier).
+
+See [Indexed production workflows](docs/PRODUCTION_WORKFLOWS.md) for SQLite
+production stores, mounted chunk transfer, ASR/ducking, and static spatial checks.
+Long-film quality, evaluator calibration, and untested hardware remain separate
+qualifications.
+
+Repository: [github.com/freestudioflow/free-studio-flow](https://github.com/freestudioflow/free-studio-flow). This tree is the FSF product. Machine-readable PDX freeze and pin records live under `compatibility/`. It does **not** ship the B-roll generator; that remains [b-roll-library-generator](https://github.com/pdx-experimental/b-roll-library-generator).
+
+### Remote workers and model APIs
+
+This checkout includes opt-in `fsf remote` parent/worker dispatch and `fsf api`
+profiles for text, image, video, audio and upscale outputs. Copy the disabled
+templates with `fsf remote templates --out config` into an existing empty
+directory. See the [operator and agent guide](src/fsf/remote/templates/AGENT_GUIDE.md)
+for setup, recovery, provider protocol limits and recipe customization.
+These workflows and the production extensions below are included in the rc10
+distributions. Use matching parent and worker builds.
+Remote outputs retain parent-side QC and review requirements; successful transport
+does not establish real model inference or visual consistency.
+
+Runtime pins: `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, `pdx-adapter-media==0.2.0a3`.
+
+### GPU workers and control sources (rc8)
+
+Pinned tool preparation, provider-native artifact transfer, explicit v2 CUDA requests
+and global Blender segments are described in
+[Versioned remote jobs](docs/REMOTE_DATA_PLANE.md). These additions were introduced
+in rc8. Use matching parent and worker builds for current jobs. GPU execution requires
+operator resource approval and verified host
+capability. Technical control-video checks leave motion review `not_reviewed`.
+
+Approved worker recipes can fill free GPU slots as tasks finish, bind selected
+CUDA devices, and explicitly share cards within declared slot and memory
+budgets. Pause drains running tasks; continuation rechecks accepted outputs.
+Native archives remain bounded to 64 MiB, and Kaggle also enforces the configured
+encoded-notebook limit. Native downloads retry whole archives rather than
+resuming byte offsets.
+
+An optional pinned Anatomy checkout and Node runtime can supply spring-state
+control samples with matching pose and readout. These are mechanism control
+visualizations, not a general physics engine or proof of downstream model
+motion adherence. Tools, models and provider capabilities remain recipe-specific.
+
+</details>
+
+License: Apache-2.0. See [LICENSE](LICENSE).
 
 ## Docs
 

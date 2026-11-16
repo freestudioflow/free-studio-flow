@@ -115,7 +115,7 @@ A local external CLI / script process executor can be defined using `kind: "proc
   "kind": "process",
   "command_args": [
     "python",
-    "/opt/fsf-tools/sample_worker.py",
+    "/path/to/your_worker.py",
     "--shot",
     "{shot_id}",
     "--out",
@@ -125,7 +125,7 @@ A local external CLI / script process executor can be defined using `kind: "proc
 }
 ```
 
-This is a configuration template: install your worker at the chosen absolute path and replace `python` with the intended interpreter. The worker is not included in this package. Process executors isolate output files in temporary scratch directories; the process inherits the caller working directory. Supported placeholders are `{shot_id}`, `{prompt}`, `{output}`, `{input}`, `{input_video}`, `{duration}`, `{duration_int}`, and `{generation_attempt}`. Errors and timeouts redact known secrets, and successful artifacts are published atomically. This is output isolation, not an operating-system security sandbox.
+This is a configuration template: write or install your worker (for a quick local test, an FFmpeg script taking `{shot_id}`, `{output}`, and `{duration}` works; see [Getting Started](GETTING_STARTED.md)) and replace `python` with the intended interpreter. The package does not bundle a production model worker (`/path/to/your_worker.py` is a placeholder). Process executors isolate output files in temporary scratch directories; the process inherits the caller working directory. Supported placeholders are `{shot_id}`, `{prompt}`, `{output}`, `{input}`, `{input_video}`, `{duration}`, `{duration_int}`, and `{generation_attempt}`. Errors and timeouts redact known secrets, and successful artifacts are published atomically. This is output isolation, not an operating-system security sandbox.
 
 Gitignored `AGENTS.local.md` may list which variable names and interpreter this machine uses. Still do not paste tokens.
 

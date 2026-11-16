@@ -175,9 +175,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inspect asynchronous Handoff workorders and agent results",
     )
     wo_sub = wo_cmd.add_subparsers(dest="wo_action")
-    wo_list = wo_sub.add_parser("list", help="List pending workorders in an output directory")
+    wo_list = wo_sub.add_parser("list", help="List Handoff workorders in an output directory")
     wo_list.add_argument("out_dir", help="Output directory containing handoff/workorders")
     wo_list.add_argument("--json", action="store_true", help="Output in JSON format")
+    wo_list.add_argument("--active-only", action="store_true", help="Show only active pending workorders")
+    wo_list.add_argument("--summary", action="store_true", help="Include active/historical classification in JSON")
+    wo_input = wo_sub.add_parser("input", help="Verify the input of an active local Handoff workorder")
+    wo_input.add_argument("out_dir")
+    wo_input.add_argument("workorder_id")
+    wo_fulfill = wo_sub.add_parser("fulfill", help="Validate output/failure and write a workorder result")
+    wo_fulfill.add_argument("out_dir", help="Job output directory")
+    wo_fulfill.add_argument("workorder_id", help="Active workorder ID")
+    wo_fulfill.add_argument("--artifact", default=None, help="Produced artifact path matching target_artifact")
+    wo_fulfill.add_argument("--status", choices=("completed", "failed"), default="completed", help="Outcome status")
+    wo_fulfill.add_argument("--continuity-method", default=None, help="Explicitly declare continuity method used")
+    wo_fulfill.add_argument("--ref-asset", action="append", default=None, help="Declared ref asset usage as KEY=SHA256")
+    wo_fulfill.add_argument("--capability-gap", default=None, help="Unresolved capability gap (for --status failed)")
+    wo_fulfill.add_argument("--detail", default=None, help="Optional operator/agent detail")
 
     # review (Consistency review gate)
     review_cmd = subparsers.add_parser(
@@ -266,8 +280,24 @@ def build_parser() -> argparse.ArgumentParser:
         "verify",
         help="Verify media file technical conformance against expected contract (PDX-P1)",
     )
-    verify_cmd.add_argument("media_file", help="Path to video or audio file")
+    verify_cmd.add_argument("media_file", nargs="?", help="Path to video or audio file")
     verify_cmd.add_argument("--expected", default=None, help="Path to expected JSON contract file or JSON string")
+    verify_cmd.add_argument("--job", help="Verify the assembled MP4 against its execution journal and plan")
+    verify_cmd.add_argument("--artifact", help="Job-relative artifact to verify in place of the assembly")
+    verify_cmd.add_argument("--plan", help="Original plan for a job without plan.json in its output directory")
+    demo_cmd = subparsers.add_parser("demo", help="Produce and verify a short local synthetic MP4")
+    demo_cmd.add_argument("--out", default="demo-output", help="New output directory (default: demo-output)")
+    demo_cmd.add_argument("--handoff", action="store_true", help="Demonstrate closed synthetic Handoff, continuity, and review lifecycle")
+    status_cmd = subparsers.add_parser("status", help="Show a local job's last recorded state and next action")
+    status_cmd.add_argument("out_dir", help="Job output directory")
+    status_cmd.add_argument("--json", action="store_true", help="Output a structured status report")
+    sheet_cmd = subparsers.add_parser("sheet", help="Create or inspect starter DOCX shot sheets")
+    sheet_sub = sheet_cmd.add_subparsers(dest="sheet_action")
+    sheet_new = sheet_sub.add_parser("new", help="Write a starter DOCX shot sheet")
+    sheet_new.add_argument("--out", default="shot_list.docx", help="Output DOCX file (default: shot_list.docx)")
+    sheet_new.add_argument("--shots", type=int, default=2, help="Number of starter shots (default: 2)")
+    sheet_new.add_argument("--handoff", action="store_true", help="Include ID, CONTINUITY, and REVIEW_REQUIRED tags")
+    sheet_new.add_argument("--force", action="store_true", help="Overwrite existing file")
 
     # executors (M4)
     subparsers.add_parser(
@@ -276,10 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # FSF-S studio flows (CLI / skill; no desk)
-    subparsers.add_parser(
+    flows_cmd = subparsers.add_parser(
         "flows",
-        help="List fourteen Studio flows and kaggle/api/local transport status",
+        help="List fourteen Studio flows and kaggle/api/local shape transport status",
     )
+    flows_cmd.add_argument("--json", action="store_true", help="Output versioned machine JSON (fsf_flows_v2)")
     flow_cmd = subparsers.add_parser(
         "flow",
         help="Run one Studio skill (CLI/skill first; no UI)",
@@ -555,15 +586,33 @@ def handle_live_check(args: argparse.Namespace) -> int:
     return 1
 
 
-def handle_flows() -> int:
-    print("=== FSF-S Studio Flows (CLI / skill; no desk) ===")
-    for flow in list_studio_flows():
-        print(f"  [{flow['status']:<11}] {flow['phase']} {flow['skill']}  {flow['title']}")
+def handle_flows(args: argparse.Namespace | None = None) -> int:
+    flows = list_studio_flows()
+    if getattr(args, "json", False):
+        payload = {
+            "schema_version": "fsf_flows_v2",
+            "transport_mode": "shape",
+            "live_backend_wired": False,
+            "flows": [
+                {
+                    **flow,
+                    "interface_status": flow["status"],
+                    "transport_mode": "shape",
+                    "live_backend_wired": False,
+                }
+                for flow in flows
+            ],
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+    print("=== FSF-S Studio Flows (CLI / skill interface; shape-only transports, not live backends) ===")
+    for flow in flows:
+        print(f"  [{flow['status']:<11}] [shape-only] {flow['phase']} {flow['skill']}  {flow['title']}")
         bits = []
         for name in TRANSPORTS:
             row = flow["transports"][name]
             bits.append(f"{name}={row['status']}")
-        print(f"               transports: {', '.join(bits)}")
+        print(f"               transports (shape stubs): {', '.join(bits)}")
     return 0
 
 
@@ -664,7 +713,26 @@ def handle_run(args: argparse.Namespace) -> int:
 
 
 def handle_verify(args: argparse.Namespace) -> int:
+    if args.job is not None:
+        if args.media_file is not None or args.expected is not None:
+            print("[FSF Verify] Use --job with optional --artifact and --plan.", file=sys.stderr)
+            return 2
+        from fsf.runtime.job_media import JobMediaError, verify_job
+        try:
+            result = verify_job(args.job, artifact=args.artifact, plan=args.plan)
+        except JobMediaError as exc:
+            return report_local_media_error("Verify", str(exc))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+            return report_local_media_error("Verify", "JOB_INVALID")
+        print(json.dumps(result, ensure_ascii=True, indent=2))
+        return 0 if result["evaluation_status"] == "conforms" else 1
+    if not args.media_file or args.artifact is not None or args.plan is not None:
+        print("[FSF Verify] Specify a media file or --job.", file=sys.stderr)
+        return 2
     media_path = Path(args.media_file)
+    if media_path.is_dir():
+        print(f"[FSF Verify] '{args.media_file}' is a directory. Use --job '{args.media_file}'.", file=sys.stderr)
+        return 2
     expected = DEFAULT_BROLL_EXPECTED
     if args.expected:
         exp_path = Path(args.expected)
@@ -687,23 +755,186 @@ def handle_verify(args: argparse.Namespace) -> int:
     return 0 if report.get("evaluation_status") == "conforms" else 1
 
 
+def report_local_media_error(command, code):
+    hint = " Put working ffmpeg and ffprobe executables on PATH." if code == "FFMPEG_REQUIRED" else ""
+    print(f"[FSF {command}] {code}.{hint}", file=sys.stderr)
+    return 1
+
+
+def handle_demo(args: argparse.Namespace) -> int:
+    from fsf.runtime.demo import run_demo
+    from fsf.runtime.job_media import JobMediaError
+    handoff = bool(getattr(args, "handoff", False))
+    try:
+        result = run_demo(args.out, handoff=handoff)
+    except KeyboardInterrupt:
+        print("[FSF Demo] Cancelled.", file=sys.stderr)
+        return 130
+    except JobMediaError as exc:
+        return report_local_media_error("Demo", str(exc))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+        return report_local_media_error("Demo", "DEMO_OUTPUT_OR_EXECUTION_INVALID")
+    print(json.dumps({**result,"output_dir":args.out,
+                     "media_path":str(Path(args.out) / result["artifact"])}, ensure_ascii=True, indent=2))
+    return 0
+
+
+def handle_sheet(args: argparse.Namespace) -> int:
+    from docx import Document
+
+    action = getattr(args, "sheet_action", None)
+    if action != "new":
+        print("[FSF Sheet] Use 'fsf sheet new --out shot_list.docx'.", file=sys.stderr)
+        return 2
+    shots = int(getattr(args, "shots", 2) or 0)
+    if shots < 1:
+        print("[FSF Sheet] --shots must be at least 1.", file=sys.stderr)
+        return 2
+    target = Path(args.out)
+    if target.exists() and not getattr(args, "force", False):
+        print(f"[FSF Sheet] '{target}' already exists. Pass --force to overwrite.", file=sys.stderr)
+        return 1
+    if target.parent and not target.parent.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+    doc = Document()
+    handoff = bool(getattr(args, "handoff", False))
+    for index in range(1, shots + 1):
+        if index > 1:
+            doc.add_paragraph("-----")
+        shot_id = f"T{index:02d}"
+        if handoff:
+            doc.add_paragraph(f"ID: {shot_id}")
+            if index > 1:
+                doc.add_paragraph(f"CONTINUITY: T{index - 1:02d}")
+                doc.add_paragraph("CONTINUITY_ASPECTS: appearance")
+            doc.add_paragraph("REVIEW_REQUIRED: true")
+        doc.add_paragraph(f"SHOT: Synthetic shot {shot_id} description. 2 seconds.")
+    doc.save(target)
+    print(json.dumps({"schema_version": "fsf_sheet_starter_v1", "path": str(target), "shots": shots, "handoff": handoff}, ensure_ascii=True))
+    return 0
+
+
+def handle_status(args: argparse.Namespace) -> int:
+    from fsf.runtime.job_status import inspect_status
+
+    exit_code = 0
+    try:
+        report = inspect_status(args.out_dir)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+        report = {"schema_version": "fsf_job_status_v1", "out_dir": args.out_dir,
+                  "job_id": None, "run_id": None, "state": "unknown", "workorders": [],
+                  "blockers": [{"code": "STATUS_RECORD_INVALID"}],
+                  "next_action": {"kind": "inspect_records", "argv": None,
+                                  "instruction": "Check that the job records are readable and intact."}}
+        exit_code = 1
+    if args.json:
+        print(json.dumps(report, ensure_ascii=True, indent=2))
+    else:
+        print(f"Job state: {report['state']}")
+        for order in report["workorders"]:
+            print(f"  {order['workorder_id']} (attempt {order['attempt_id']})")
+        for blocker in report["blockers"]:
+            print(f"  {blocker['code']} {blocker.get('step_id', '')}".rstrip())
+        print(report["next_action"]["instruction"])
+    return exit_code
+
+
 def handle_workorder(args: argparse.Namespace) -> int:
     from fsf.runtime.handoff import list_pending_workorders
 
     action = getattr(args, "wo_action", None)
+    if action == "input":
+        import re
+        from fsf.core.asset_library import _no_links
+        from fsf.core.edit_store import read_json
+        from fsf.runtime.handoff import resolve_workorder_input
+
+        try:
+            root = Path(args.out_dir).resolve(strict=True)
+            identifier = args.workorder_id
+            if not re.fullmatch(r"wo_[A-Za-z0-9_-]+", identifier):
+                raise ValueError()
+            workorder_path = root / "handoff" / "workorders" / f"{identifier}.workorder.json"
+            journal_path = root / "fsf_execution_journal.json"
+            _no_links(workorder_path)
+            _no_links(journal_path)
+            order, journal = read_json(workorder_path), read_json(journal_path)
+            step = journal["steps"][order["step_id"]]
+            if (order["workorder_id"] != identifier or step["workorder_id"] != identifier
+                    or step["workorder_digest"] != order["workorder_digest"]
+                    or type(step["attempt_id"]) is not int or order["attempt_id"] != step["attempt_id"]
+                    or step["status"] != "pending_handoff"
+                    or any(order[key] != journal[key] for key in ("job_id", "run_id", "plan_digest"))):
+                raise ValueError()
+            path = resolve_workorder_input(order, root)
+        except (KeyError, OSError, TypeError, ValueError, AttributeError):
+            print("[FSF Handoff] Cannot verify the active workorder input.", file=sys.stderr)
+            return 1
+        print(json.dumps({"path":path.relative_to(root).as_posix(),
+                          "sha256":order["task_payload"]["input_artifact_sha256"]}, ensure_ascii=True))
+        return 0
+    if action == "fulfill":
+        from fsf.runtime.handoff import HandoffIntegrityError, HandoffSecurityError, fulfill_workorder
+        from fsf.runtime.job_media import JobMediaError
+
+        ref_assets: list[tuple[str, str]] | None = None
+        if getattr(args, "ref_asset", None):
+            ref_assets = []
+            for entry in args.ref_asset:
+                if "=" not in entry:
+                    print("[FSF Handoff] --ref-asset must use KEY=SHA256.", file=sys.stderr)
+                    return 2
+                key, sha_val = entry.split("=", 1)
+                ref_assets.append((key.strip(), sha_val.strip()))
+        try:
+            receipt = fulfill_workorder(
+                args.out_dir,
+                args.workorder_id,
+                artifact=args.artifact,
+                status=args.status,
+                continuity_method=args.continuity_method,
+                ref_assets=ref_assets,
+                capability_gap=args.capability_gap,
+                detail=args.detail,
+            )
+        except (HandoffIntegrityError, HandoffSecurityError, JobMediaError, OSError, ValueError) as exc:
+            print(f"[FSF Handoff] {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(receipt, ensure_ascii=True, indent=2))
+        return 0
     if action == "list":
+        from fsf.runtime.handoff import list_active_workorders, summarize_workorders
+
         out_dir = Path(args.out_dir).resolve()
-        workorders = list_pending_workorders(out_dir)
+        active_only = bool(getattr(args, "active_only", False))
+        use_summary = bool(getattr(args, "summary", False))
         if getattr(args, "json", False):
+            if use_summary:
+                workorders = summarize_workorders(out_dir, active_only=active_only)
+            else:
+                workorders = list_active_workorders(out_dir) if active_only else list_pending_workorders(out_dir)
             print(json.dumps(workorders, indent=2, ensure_ascii=False))
             return 0
 
-        print(f"=== Pending Handoff Workorders in '{out_dir}' ===")
-        if not workorders:
-            print("  No pending workorders.")
-            return 0
-        for wo in workorders:
-            print(f"  [{wo.get('workorder_id')}] step={wo.get('step_id')} tool={wo.get('tool')} target={wo.get('target_artifact')}")
+        summaries = summarize_workorders(out_dir, active_only=active_only)
+        active_rows = [row for row in summaries if row["state"] == "active_pending"]
+        history_rows = [row for row in summaries if row["state"] != "active_pending"]
+        print(f"=== Active Handoff Workorders in '{out_dir}' ===")
+        if not active_rows:
+            print("  No active pending workorders.")
+        for row in active_rows:
+            contract = row.get("media_summary")
+            spec = (f" media={contract.get('width')}x{contract.get('height')}@{contract.get('fps')}fps/"
+                    f"{contract.get('duration_seconds')}s/audio={contract.get('audio')}"
+                    if contract else "")
+            cont = " continuity=required" if row.get("continuity_required") else ""
+            res_tag = " [result-staged]" if row.get("result_present") else ""
+            print(f"  [{row['workorder_id']}] step={row['step_id']} att={row['attempt_id']} "
+                  f"tool={row['tool']} target={row['target_artifact']}{spec}{cont}{res_tag}")
+        if not active_only and history_rows:
+            print("=== Historical / Superseded Workorders ===")
+            for row in history_rows:
+                print(f"  [{row['state']}] [{row['workorder_id']}] step={row['step_id']} att={row['attempt_id']} target={row['target_artifact']}")
         return 0
     return 1
 
@@ -715,6 +946,7 @@ def handle_review(args: argparse.Namespace) -> int:
         check_assembly_gate,
         list_shots_pending_review,
         load_reviews,
+        review_workorder_valid,
         save_reviews,
     )
 
@@ -802,6 +1034,10 @@ def handle_review(args: argparse.Namespace) -> int:
                 "not completed or reused — cannot review.",
                 file=sys.stderr,
             )
+            return 1
+        if action == "approve" and not review_workorder_valid(
+                step_data, step_id=step_id, job_id=journal.get("job_id"), run_id=journal.get("run_id")):
+            print("[FSF Review] Handoff workorder or attempt identity is missing or invalid.", file=sys.stderr)
             return 1
 
         out_files = step_data.get("output_files", [])
@@ -913,7 +1149,8 @@ def handle_execute(args: argparse.Namespace) -> int:
         pending_count = result.get("pending_handoff_count", 0)
         wo_dir = out_dir / "handoff" / "workorders"
         print(
-            f"[FSF Execute] Pending handoff: waiting for {pending_count} workorder(s) in '{wo_dir}'.",
+            f"[FSF Execute] Pending handoff: waiting for {pending_count} workorder(s) in '{wo_dir}'. "
+            f"Run 'fsf status {out_dir} --json' for next_action.",
             file=sys.stderr,
         )
         return 10
@@ -921,11 +1158,32 @@ def handle_execute(args: argparse.Namespace) -> int:
         print(f"[FSF Execute] Delivery blocked: {status}.",file=sys.stderr)
         return 2
     else:
-        print(
-            f"[FSF Execute] Failed: {result.get('failed_count')} failed, "
-            f"{result.get('blocked_count')} blocked.",
-            file=sys.stderr,
-        )
+        failed_count = int(result.get("failed_count") or 0)
+        blocked_count = int(result.get("blocked_count") or 0)
+        steps_map = result.get("steps") or {}
+        if failed_count == 0 and blocked_count > 0:
+            review_blocked = any(
+                isinstance(s, dict) and s.get("blocker") == "REVIEW_REQUIRED"
+                for s in steps_map.values()
+            )
+            if review_blocked:
+                print(
+                    f"[FSF Execute] Waiting for consistency review: 0 failed, {blocked_count} blocked. "
+                    f"Run 'fsf status {out_dir} --json' or 'fsf review list {out_dir}'.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"[FSF Execute] Blocked: 0 failed, {blocked_count} blocked. "
+                    f"Run 'fsf status {out_dir} --json'.",
+                    file=sys.stderr,
+                )
+        else:
+            print(
+                f"[FSF Execute] Failed: {failed_count} failed, {blocked_count} blocked. "
+                f"Run 'fsf status {out_dir} --json'.",
+                file=sys.stderr,
+            )
         return 2
 
 
@@ -1011,6 +1269,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_run(args)
     elif args.command == "verify":
         return handle_verify(args)
+    elif args.command == "demo":
+        return handle_demo(args)
+    elif args.command == "sheet":
+        return handle_sheet(args)
     elif args.command == "executors":
         print("=== Registered Video Executors ===")
         for exc in DEFAULT_REGISTRY.list_executors():
@@ -1021,7 +1283,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 0
     elif args.command == "flows":
-        return handle_flows()
+        return handle_flows(args)
     elif args.command == "flow":
         if getattr(args, "flow_command", None) == "run":
             return handle_flow_run(args)
@@ -1031,6 +1293,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_check(args)
     elif args.command == "workorder":
         return handle_workorder(args)
+    elif args.command == "status":
+        return handle_status(args)
     elif args.command == "review":
         return handle_review(args)
     elif args.command == "live-check":
