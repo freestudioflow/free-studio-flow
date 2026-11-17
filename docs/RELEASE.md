@@ -12,6 +12,37 @@ remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
 `pdx-adapter-media==0.2.0a3`. Do not publish a stable `0.1.0` until those
 pins leave rc/a.
 
+## Release notes (0.1.0rc15)
+
+Version `0.1.0rc15` is a release candidate under local verification. Install
+from a source checkout (`pip install .`) or the candidate wheel to try these
+updates before PyPI promotion.
+
+- `workorder fulfill --artifact` now checks existing ancestor directories for
+  links and reports the exact `target_artifact` write path cleanly when the
+  target file does not yet exist, instead of exposing a raw `FileNotFoundError`.
+- `fsf status <out_dir> --json` now includes `write_artifact_to`,
+  `input_argv` (for continuity shots), and `fulfill_argv` on each active
+  workorder, and fills `next_action.argv` directly when a single pending
+  workorder awaits fulfillment.
+- `fsf execute` persists a bound `plan.json` alongside the journal without
+  overwriting conflicting files, allowing `status --json` to surface
+  `fsf verify --job <out_dir>` automatically while retaining `verify_with_plan`
+  as fallback and reporting `PLAN_RECORD_CONFLICT` if a mismatched `plan.json`
+  exists on disk.
+- Execution journals record a strictly whitelisted `invocation` summary
+  (`handoff`, validated `executor_override`, and fixed `plan_ref: "plan.json"`)
+  to populate `resume` `argv` only when both `plan.json` digest and whitelist
+  checks pass.
+- `README.md` has been trimmed into a focused quickstart and command index
+  with `--version` check and `fsf` topic guides extracted into `docs/`
+  (`HANDOFF.md`, `CONSISTENCY_REVIEW.md`, `AUDIO.md`, `EDIT_AND_POST.md`,
+  `ASSETS.md`, and `BLENDER.md`).
+- Accepted scope and open qualifications carry forward unchanged: local
+  synthetic media on Windows and Linux with working `ffmpeg`/`ffprobe`,
+  while macOS, real model inference, long-film audiovisual quality, human QC,
+  and filesystem power-loss durability remain uncertified.
+
 ## Release notes (0.1.0rc14)
 
 Version `0.1.0rc14` is published from tag `v0.1.0rc14` at commit

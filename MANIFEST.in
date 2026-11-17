@@ -1,7 +1,8 @@
 include README.md LICENSE AGENTS.md AGENTS.local.example.md SECURITY.md
 include fsf-executors.example.json
 include docs/RELEASE.md docs/FSF_LIVE_VERIFY.md docs/DATA_GOVERNANCE.md
-include docs/GETTING_STARTED.md
+include docs/GETTING_STARTED.md docs/HANDOFF.md docs/CONSISTENCY_REVIEW.md
+include docs/AUDIO.md docs/EDIT_AND_POST.md docs/ASSETS.md docs/BLENDER.md
 include docs/REMOTE_DATA_PLANE.md
 include docs/PRODUCTION_WORKFLOWS.md
 include compatibility/*.json

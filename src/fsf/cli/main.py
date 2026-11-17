@@ -1083,6 +1083,33 @@ def handle_review(args: argparse.Namespace) -> int:
     return 1
 
 
+def _persist_bound_plan(out_dir: Path, plan_data: dict[str, Any]) -> None:
+    import os
+    import tempfile
+    from fsf.runtime.handoff import _ensure_no_internal_links, _publish_workorder_result
+
+    if not out_dir.is_dir():
+        return
+    target = out_dir / "plan.json"
+    if os.path.lexists(target):
+        return
+    _ensure_no_internal_links(out_dir, target)
+    data = json.dumps(plan_data, allow_nan=False, indent=2).encode("utf-8")
+    fd, name = tempfile.mkstemp(prefix=".plan-", suffix=".tmp", dir=out_dir)
+    staged = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            _publish_workorder_result(staged, target)
+        except FileExistsError:
+            pass
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 def handle_execute(args: argparse.Namespace) -> int:
     from fsf.runtime.plan_executor import PlanExecutor
 
@@ -1133,6 +1160,7 @@ def handle_execute(args: argparse.Namespace) -> int:
 
     try:
         result = executor.execute_plan(plan_data)
+        _persist_bound_plan(out_dir, plan_data)
     except Exception as exc:
         print(f"[FSF Execute Error] Execution failed: {scrub_secrets(str(exc))}", file=sys.stderr)
         return 1

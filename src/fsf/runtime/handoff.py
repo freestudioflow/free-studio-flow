@@ -739,13 +739,17 @@ def _ensure_no_internal_links(root: Path, target: Path) -> None:
     cur = root
     for part in rel.parts:
         cur = cur / part
-        if os.name == "nt":
-            if _windows_attributes(cur) & 0x400:
-                raise AssetValidationError("ASSET_PATH")
-        else:
-            info = cur.lstat()
-            if stat_mod.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & 0x400):
-                raise AssetValidationError("ASSET_PATH")
+        try:
+            if os.name == "nt":
+                if _windows_attributes(cur) & 0x400:
+                    raise AssetValidationError("ASSET_PATH")
+            else:
+                info = cur.lstat()
+                if stat_mod.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & 0x400):
+                    raise AssetValidationError("ASSET_PATH")
+        except FileNotFoundError:
+            # All existing ancestor segments below root were checked above.
+            return
 
 
 def load_active_workorder(root: Path, journal: dict[str, Any], step_id: str) -> dict[str, Any]:
@@ -992,17 +996,38 @@ def fulfill_workorder(
         _ensure_no_internal_links(root, expected_raw)
         expected_target = safe_resolve_artifact_path(order["target_artifact"], root)
         if cand.is_absolute():
-            _ensure_no_internal_links(root, expected_raw)
+            try:
+                cand.relative_to(root)
+            except ValueError:
+                pass
+            else:
+                _ensure_no_internal_links(root, cand)
             resolved = cand.resolve()
-        elif (root / cand).exists() or (root / cand).is_symlink():
-            rel_raw = root.joinpath(*_path_parts(cand.as_posix()))
-            _ensure_no_internal_links(root, rel_raw)
-            resolved = rel_raw.resolve()
         else:
-            resolved = cand.resolve()
+            try:
+                rel_raw: Path | None = root.joinpath(*_path_parts(cand.as_posix()))
+            except Exception:
+                rel_raw = None
+            if rel_raw is not None and os.path.lexists(rel_raw):
+                _ensure_no_internal_links(root, rel_raw)
+                resolved = rel_raw.resolve()
+            else:
+                cwd_resolved = cand.resolve()
+                if cwd_resolved == expected_target or rel_raw is None:
+                    resolved = cwd_resolved
+                else:
+                    _ensure_no_internal_links(root, rel_raw)
+                    resolved = rel_raw.resolve()
         if resolved != expected_target:
             raise HandoffIntegrityError(
-                f"Artifact '{art_raw}' does not match workorder target_artifact '{order['target_artifact']}'."
+                f"Artifact '{art_raw}' does not match workorder target_artifact "
+                f"'{order['target_artifact']}'. Write your produced file to '{expected_raw}' "
+                f"first, then run fulfill with --artifact '{expected_raw}'."
+            )
+        if not os.path.lexists(expected_raw):
+            raise HandoffIntegrityError(
+                f"No file at the workorder target '{expected_raw}'. Write your produced "
+                f"file to that exact path first, then run fulfill with --artifact '{expected_raw}'."
             )
         if not resolved.is_file() or resolved.stat().st_size == 0:
             raise HandoffIntegrityError(f"Target artifact '{order['target_artifact']}' is missing or empty.")

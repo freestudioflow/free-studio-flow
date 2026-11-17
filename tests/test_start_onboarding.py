@@ -106,15 +106,20 @@ def test_workorder_embeds_contract_fulfill_and_diagnostics(tmp_path, capsys):
     assert any(b.get("code") == "REVIEW_NOT_APPROVED" and b.get("verdict") == "needs_rework"
                for b in rejected_status["blockers"])
 
-    # Approve T02 -> assemble -> status verify_with_plan keeps argv=None -> verify --job conforms
+    # Approve T02 -> assemble -> status verify includes argv; missing plan.json keeps verify_with_plan fallback
     assert main(["review", "approve", str(out), wo_t02["step_id"]]) == 0
     capsys.readouterr()
     assert main(["execute", str(plan_path), "--out", str(out), "--handoff"]) == 0
     capsys.readouterr()
     assert main(["status", str(out), "--json"]) == 0
     done_status = json.loads(capsys.readouterr().out)
-    assert done_status["next_action"]["kind"] == "verify_with_plan"
-    assert done_status["next_action"]["argv"] is None
+    assert done_status["next_action"]["kind"] == "verify"
+    assert done_status["next_action"]["argv"] == ["fsf", "verify", "--job", str(out)]
+    (out / "plan.json").unlink()
+    assert main(["status", str(out), "--json"]) == 0
+    fallback_status = json.loads(capsys.readouterr().out)
+    assert fallback_status["next_action"]["kind"] == "verify_with_plan"
+    assert fallback_status["next_action"]["argv"] is None
     assert main(["verify", "--job", str(out), "--plan", str(plan_path)]) == 0
     assert json.loads(capsys.readouterr().out)["evaluation_status"] == "conforms"
 

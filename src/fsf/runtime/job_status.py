@@ -1,5 +1,6 @@
 """Read the last recorded local execution state without resuming it."""
 from pathlib import Path
+import re
 
 from fsf.conformance.digest import canonical_contract_digest
 from fsf.core.asset_library import _no_links, _path_parts
@@ -7,6 +8,33 @@ from fsf.core.edit_store import read_json
 from fsf.runtime.blender import sha
 from fsf.runtime.consistency_review import REVIEW_STORE_FILENAME, is_review_valid
 from fsf.runtime.handoff import load_active_workorder
+
+_SAFE_EXECUTOR_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_INVOCATION_KEYS = {"handoff", "executor_override", "plan_ref"}
+
+
+def _resume_argv(root: Path, directory: str, journal: dict, bound_plan: bool) -> list[str] | None:
+    """Build suggested resume argv only from a bound plan and whitelisted journal invocation."""
+    if not bound_plan:
+        return None
+    invocation = journal.get("invocation")
+    if not isinstance(invocation, dict) or set(invocation.keys()) != _INVOCATION_KEYS:
+        return None
+    handoff_flag = invocation.get("handoff")
+    if type(handoff_flag) is not bool:
+        return None
+    if invocation.get("plan_ref") != "plan.json":
+        return None
+    executor_override = invocation.get("executor_override")
+    if executor_override is not None:
+        if not isinstance(executor_override, str) or not _SAFE_EXECUTOR_RE.fullmatch(executor_override):
+            return None
+    argv = ["fsf", "execute", str(root / "plan.json"), "--out", directory]
+    if handoff_flag:
+        argv.append("--handoff")
+    if executor_override is not None:
+        argv.extend(["--executor", executor_override])
+    return argv
 
 
 def _file(root, relative):
@@ -33,7 +61,7 @@ def _identity(step_id, step):
             "attempt_id": step.get("attempt_id")}
 
 
-def _active_order(root, journal, step_id, step):
+def _active_order(root, journal, step_id, step, directory):
     identity = _identity(step_id, step)
     identifier = identity["workorder_id"]
     order = load_active_workorder(root, journal, step_id)
@@ -59,8 +87,19 @@ def _active_order(root, journal, step_id, step):
         result_state = "unverified"
     else:
         result_state = "ready_for_ingest" if result is not None else "absent"
-    return {**identity, "path": path, "target_artifact": order["target_artifact"],
-            "result_path": result_path, "result_state": result_state}
+    target = str(root.joinpath(*_path_parts(order["target_artifact"])))
+    payload = order.get("task_payload")
+    has_input = isinstance(payload, dict) and bool(payload.get("input_artifact"))
+    return {
+        **identity,
+        "path": path,
+        "target_artifact": order["target_artifact"],
+        "write_artifact_to": target,
+        "input_argv": ["fsf", "workorder", "input", directory, identifier] if has_input else None,
+        "fulfill_argv": ["fsf", "workorder", "fulfill", directory, identifier, "--artifact", target],
+        "result_path": result_path,
+        "result_state": result_state,
+    }
 
 
 def _review_blocker(root, journal, step_id, step, review):
@@ -113,10 +152,27 @@ def inspect_status(out_dir):
         raise ValueError("Invalid journal step status")
     reviews = _record(root, REVIEW_STORE_FILENAME)
     reviews = {} if reviews is None else reviews["reviews"]
+    plan = None
+    plan_conflict = False
+    try:
+        plan = _record(root, "plan.json")
+    except (ValueError, OSError, TypeError):
+        plan_conflict = True
+    else:
+        if plan is not None:
+            try:
+                if not isinstance(plan, dict) or canonical_contract_digest(plan) != journal["plan_digest"]:
+                    plan_conflict = True
+            except (TypeError, ValueError):
+                plan_conflict = True
+    if plan_conflict:
+        report["blockers"].append({"code": "PLAN_RECORD_CONFLICT"})
+    bound_plan = plan is not None and not plan_conflict
+    resume_argv = _resume_argv(root, directory, journal, bound_plan)
     for step_id, step in steps.items():
         if step["status"] == "pending_handoff":
             try:
-                order = _active_order(root, journal, step_id, step)
+                order = _active_order(root, journal, step_id, step, directory)
             except (KeyError, ValueError, OSError, TypeError, AttributeError):
                 report["blockers"].append({"step_id": step_id, "code": "WORKORDER_UNVERIFIED"})
             else:
@@ -137,7 +193,7 @@ def inspect_status(out_dir):
     codes = {item["code"] for item in report["blockers"]}
     if "STEP_FAILED" in codes or recorded == "failed":
         return reply("failed", _action("inspect_failure", "Inspect the failed step and original execute output before retrying."))
-    if codes & {"STEP_BLOCKED", "WORKORDER_UNVERIFIED", "REVIEW_ARTIFACT_UNAVAILABLE", "REVIEW_ARTIFACT_CHANGED"}:
+    if codes & {"STEP_BLOCKED", "PLAN_RECORD_CONFLICT", "WORKORDER_UNVERIFIED", "REVIEW_ARTIFACT_UNAVAILABLE", "REVIEW_ARTIFACT_CHANGED"}:
         return reply("blocked", _action("inspect_blocker", "Resolve the recorded blockers before resuming."))
     if "REVIEW_NOT_APPROVED" in codes:
         return reply("waiting_review", _action(
@@ -153,17 +209,24 @@ def inspect_status(out_dir):
             return reply("blocked", _action("inspect_result", "Check the submitted result against its listed workorder."))
         if any(row["result_state"] == "ready_for_ingest" for row in report["workorders"]):
             return reply("waiting_handoff", _action(
-                "resume", "Re-run the original execute command to validate and ingest the submitted result."))
+                "resume", "Re-run the original execute command to validate and ingest the submitted result.",
+                *(resume_argv or ())))
+        if len(report["workorders"]) == 1:
+            only_wo = report["workorders"][0]
+            return reply("waiting_handoff", _action(
+                "fulfill_workorder",
+                f"Write the produced artifact to '{only_wo['write_artifact_to']}' and submit it with fulfill_argv, then re-run execute.",
+                *only_wo["fulfill_argv"]))
         return reply("waiting_handoff", _action(
-            "fulfill_workorder", "Open a workorder listed in this report. Submit its result, then re-run the original execute command."))
+            "fulfill_workorder", "Open a workorder listed in this report. Write its artifact to write_artifact_to, submit with fulfill_argv, then re-run the original execute command."))
     if "EXTERNAL_RESULT_PENDING" in codes or recorded == "waiting_external":
         return reply("waiting_external", _action("reconcile", "Check the existing external request before resuming."))
     if recorded == "blocked" and any(step.get("blocker") == "REVIEW_REQUIRED" for step in steps.values()):
-        return reply("ready_to_resume", _action("resume", "Re-run the original execute command with its original options."))
+        return reply("ready_to_resume", _action(
+            "resume", "Re-run the original execute command with its original options.",
+            *(resume_argv or ())))
     if recorded == "blocked" or any(step["status"] == "blocked" for step in steps.values()):
         return reply("blocked", _action("inspect_blocker", "Check the original execute output before resuming."))
-    plan = _record(root, "plan.json")
-    bound_plan = plan is not None and canonical_contract_digest(plan) == journal["plan_digest"]
     legacy_complete = bound_plan and {step["id"] for step in plan["steps"]} == set(steps)
     if (recorded == "completed" or (recorded is None and legacy_complete)) and steps and all(
             step["status"] == "completed" for step in steps.values()):

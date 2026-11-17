@@ -1093,6 +1093,14 @@ class PlanExecutor:
                 if sdata.get("workorder_digest"):
                     journal_steps[sid]["workorder_digest"] = sdata["workorder_digest"]
 
+        import re as _re
+
+        safe_executor = (
+            self.executor_override
+            if isinstance(self.executor_override, str)
+            and bool(_re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", self.executor_override))
+            else None
+        )
         journal_payload = {
             "schema_version": "fsf_plan_execution_journal_v1",
             "job_id": self.current_job_id,
@@ -1101,6 +1109,11 @@ class PlanExecutor:
             "plan_digest": plan_digest,
             "source_sha256": source_sha,
             "execution_status": "blocked" if overall_status == "failed" and not failed_count else overall_status,
+            "invocation": {
+                "handoff": bool(self.handoff),
+                "executor_override": safe_executor,
+                "plan_ref": "plan.json",
+            },
             "steps": journal_steps,
         }
         from fsf.remote.contracts import write_json

@@ -113,3 +113,50 @@ def test_active_list_and_status_use_same_canonical_workorder(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["state"] == "blocked" and report["workorders"] == []
     assert report["blockers"] == [{"step_id": original["step_id"], "code": "WORKORDER_UNVERIFIED"}]
+
+
+def test_fulfill_missing_target_gives_actionable_error(tmp_path, capsys):
+    job, identifier = _pending(tmp_path, capsys)
+    order_path = job / "handoff/workorders" / f"{identifier}.workorder.json"
+    order = json.loads(order_path.read_bytes())
+    expected_raw = job / order["target_artifact"]
+    assert not expected_raw.exists()
+
+    for cand_arg in (str(expected_raw), order["target_artifact"]):
+        assert main(["workorder", "fulfill", str(job), identifier, "--artifact", cand_arg]) == 1
+        err = capsys.readouterr().err
+        assert "No file at the workorder target" in err
+        assert str(expected_raw) in err
+        assert "Errno 2" not in err
+
+    outside = tmp_path / "outside.mp4"
+    outside.write_bytes(b"wrong-location")
+    assert main(["workorder", "fulfill", str(job), identifier, "--artifact", str(outside)]) == 1
+    err = capsys.readouterr().err
+    assert "does not match workorder target_artifact" in err
+    assert str(expected_raw) in err
+
+
+def test_fulfill_missing_target_under_linked_ancestor_rejected(tmp_path, capsys):
+    import pytest
+    from fsf.conformance.digest import canonical_contract_digest as digest
+    from fsf.core.asset_library import AssetValidationError
+    from test_start_handoff import directory_link
+
+    job, identifier = _pending(tmp_path, capsys)
+    order_path = job / "handoff/workorders" / f"{identifier}.workorder.json"
+    order = json.loads(order_path.read_bytes())
+    nested = {**order, "target_artifact": "shots/T01.mp4"}
+    nested["workorder_digest"] = digest({k: v for k, v in nested.items() if k != "workorder_digest"})
+    order_path.write_text(json.dumps(nested), encoding="utf-8")
+    journal_path = job / "fsf_execution_journal.json"
+    journal = json.loads(journal_path.read_bytes())
+    journal["steps"][nested["step_id"]]["workorder_digest"] = nested["workorder_digest"]
+    journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+    real_target = tmp_path / "outside_dir"
+    directory_link(real_target, job / "shots")
+    missing_inside_link = job / "shots" / "T01.mp4"
+    assert not missing_inside_link.exists()
+    with pytest.raises(AssetValidationError):
+        handoff.fulfill_workorder(job, identifier, artifact=str(missing_inside_link))
