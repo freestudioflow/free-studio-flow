@@ -5,7 +5,7 @@ Releases are the approval boundary; PyPI receives the already-approved wheel
 and source archive unchanged through Trusted Publishing. There is no
 long-lived PyPI token.
 
-The current published pre-release is **`0.1.0rc14`**, available on PyPI.
+The current published pre-release is **`0.1.0rc15`**, available on PyPI.
 Existing PyPI versions are immutable and must not be rebuilt or re-uploaded.
 Runtime pins
 remain `prodocux==0.3.0rc7`, `pdx-artifact-engine==0.3.0a8`, and
@@ -14,9 +14,14 @@ pins leave rc/a.
 
 ## Release notes (0.1.0rc15)
 
-Version `0.1.0rc15` is a release candidate under local verification. Install
-from a source checkout (`pip install .`) or the candidate wheel to try these
-updates before PyPI promotion.
+Version `0.1.0rc15` is published from tag `v0.1.0rc15` at commit
+`431aeaa30dd87c2d615719b260297c44b7c6d130`. GitHub and PyPI serve the same
+verified files. Use matching parent and worker builds.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| free_studio_flow-0.1.0rc15-py3-none-any.whl | 669222 | `ec251cf67aaccfb784fd2bc26d69a1b8c9aa68139f2eda7c8e8d5ee9cd4b5847` |
+| free_studio_flow-0.1.0rc15.tar.gz | 869874 | `70df26f156441fe51e49bb0967aa8bf0217579107fc472de8592cd35ec90b6bc` |
 
 - `workorder fulfill --artifact` now checks existing ancestor directories for
   links and reports the exact `target_artifact` write path cleanly when the

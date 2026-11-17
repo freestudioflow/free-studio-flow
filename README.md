@@ -6,9 +6,8 @@ generation and review, and assembles and verifies the finished video.
 ## Try a video locally
 
 Use Python 3.11+ and put `ffmpeg` and `ffprobe` on your PATH. From a source
-checkout, you can use `pip install .` (or install the RC15 candidate wheel) in
-place of the PyPI package. The local synthetic demo needs no account, API key, or
-GPU.
+checkout, you can use `pip install .` in place of the PyPI package. The local
+synthetic demo needs no account, API key, or GPU.
 
 **Windows (PowerShell)**
 
@@ -100,19 +99,18 @@ The demo does not download them.
 
 ## Installation and releases
 
-RC15 is a candidate awaiting PyPI promotion; the PyPI block below still
-selects the latest verified PyPI release until promotion completes. For RC15
-changes and accepted limits, see [release notes](docs/RELEASE.md#release-notes-010rc15).
+The PyPI install below selects the latest verified release. For RC15 changes,
+artifact digests, and accepted limits, see [release notes](docs/RELEASE.md#release-notes-010rc15).
 
 <!-- pypi-release-status:start -->
 Source version in this branch: **`0.1.0rc15`**.
 
-Latest verified PyPI release: **[`0.1.0rc14`](https://pypi.org/project/free-studio-flow/0.1.0rc14/)**,
-published from tag **[`v0.1.0rc14`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc14)**
-at commit `fa63ee91f55ddb5c0be1c9b215657497ba598be4`.
+Latest verified PyPI release: **[`0.1.0rc15`](https://pypi.org/project/free-studio-flow/0.1.0rc15/)**,
+published from tag **[`v0.1.0rc15`](https://github.com/freestudioflow/free-studio-flow/releases/tag/v0.1.0rc15)**
+at commit `431aeaa30dd87c2d615719b260297c44b7c6d130`.
 
 ```powershell
-python -m pip install "free-studio-flow==0.1.0rc14"
+python -m pip install "free-studio-flow==0.1.0rc15"
 ```
 <!-- pypi-release-status:end -->
 
@@ -174,6 +172,6 @@ Full operational sequence: [`AGENTS.md`](AGENTS.md).
 - Local synthetic demo, DOCX planning, `execute` resume, `status --json`, `verify --job`, Handoff workorders, and review gating are tested on Windows and Linux with local `ffmpeg`/`ffprobe`.
 - `fsf run` defaults to `mock.studio.video` (`.mock.bin`) and `fsf flow run --shape` runs shape-only contract stubs (`.shape.bin`); do not run media `verify` on stub outputs.
 - Remote recipes (`fsf remote`), GPU slots, API profiles (`fsf api`), and Blender/imported controls enforce declared limits (including the 64 MiB native archive limit) and keep human quality/listening/motion checks separate (`not_reviewed`). Successful transport or digest checks do not establish real model inference or visual consistency.
-- Historical release additions (`rc3` through `rc14`) and qualification status live in [`docs/RELEASE.md`](docs/RELEASE.md).
+- Historical release additions (`rc3` through `rc15`) and qualification status live in [`docs/RELEASE.md`](docs/RELEASE.md).
 
 License: Apache-2.0. See [LICENSE](LICENSE).
